@@ -54,6 +54,7 @@ class Settings extends Component {
             }
         } else {
             server[attr] = event.target.value;
+            server.name = server.protocol + "://" + server.address + ":" + server.port
         }
 
         this.setState({
@@ -65,6 +66,8 @@ class Settings extends Component {
         let config = Object.assign({}, this.state.config);
         let newServer = Object.assign({}, config.servers[config.servers.length - 1]);
         newServer.default = false;
+        newServer.name = "";
+        newServer.authentification = "none";
         config.servers.push(newServer);
         this.setState({
             config: config
@@ -519,6 +522,30 @@ class Settings extends Component {
                         <div className="setting-box">
                             <div className="row">
                                 <div className="label">
+                                    <div>REALTIME LAST RANGE (minute)</div>
+                                </div>
+                                <div className="input">
+                                    <select value={this.state.config.realTimeLastRange} onChange={this.onChange.bind(this, "realTimeLastRange")} disabled={!this.state.edit}>
+                                        {[1,2,3,4,5,6,7,8,9,10].map((d, i) => {
+                                            return <option key={i} value={d}>{d}</option>
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="row">
+                                <div className="label">
+                                    <div>REALTIME XLOG LAST RANGE (minute)</div>
+                                </div>
+                                <div className="input">
+                                    <select value={this.state.config.realTimeXLogLastRange} onChange={this.onChange.bind(this, "realTimeXLogLastRange")} disabled={!this.state.edit}>
+                                        {[1,2,3,4,5,6,7,8,9,10,15,30,60,120].map((d, i) => {
+                                            return <option key={i} value={d}>{d}</option>
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="row">
+                                <div className="label">
                                     <div>REALTIME DATA INTERVAL (milliseconds)</div>
                                 </div>
                                 <div className="input">
@@ -563,6 +590,17 @@ class Settings extends Component {
                                 </div>
                                 <div className="input">
                                     <input type="number" required min={60} step={60} readOnly={!this.state.edit} onChange={this.onChangeRange.bind(this, "longHistoryStep")} value={this.state.config.range.longHistoryStep} placeholder="MINUTES" />
+                                </div>
+                            </div>
+                            <div className="row">
+                                <div className="label">
+                                    <div>DATA PRELOAD</div>
+                                </div>
+                                <div className="input">
+                                    <select value={this.state.config.preload} onChange={this.onChange.bind(this, "preload")} disabled={!this.state.edit}>
+                                        <option value="Y">Y</option>
+                                        <option value="N">N</option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -740,6 +778,18 @@ class Settings extends Component {
                                     <select value={this.state.config.fontSetting.axis} onChange={this.onChangeFont.bind(this, "axis")} disabled={!this.state.edit}>
                                         {this.state.config.fonts.map((d, i) => {
                                             return <option key={i} style={{fontFamily : d.val, fontSize : "14px"}} value={d.val}>{d.name}, {d.generic}</option>
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="row">
+                                <div className="label">
+                                    <div>CHART AXIS FONT SIZE</div>
+                                </div>
+                                <div className="input">
+                                    <select value={this.state.config.fontSetting.axisFontSize} onChange={this.onChangeFont.bind(this, "axisFontSize")} disabled={!this.state.edit}>
+                                        {[8,9,10,11,12].map((d, i) => {
+                                            return <option key={i} value={d}>{d}</option>
                                         })}
                                     </select>
                                 </div>
@@ -993,6 +1043,7 @@ class Settings extends Component {
                                         </div>
                                     </div>
                                 </div>
+
                             </div>
                         </div>
 
@@ -1022,6 +1073,19 @@ class Settings extends Component {
                                     </select>
                                 </div>
                             </div>
+                            <div className="row">
+                                <div className="label">
+                                    <div>XLOG CLASSIC MODE</div>
+                                </div>
+                                <div className="input">
+                                    <select value={this.state.config.others.xlogClassicMode} onChange={this.onChangeOthers.bind(this, "xlogClassicMode")} disabled={!this.state.edit}>
+                                        {["Y","N"].map((d, i) => {
+                                            return <option key={i} value={d}>{d}</option>
+                                        })}
+                                    </select>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                     {this.state.edit &&

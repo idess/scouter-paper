@@ -1,7 +1,7 @@
 // local storage access
 import moment from "moment";
 import {Dictionary, DictType} from "./dictionary";
-export const version = "2.3.0";
+export const version = "2.6.3";
 
 export function getData(key) {
     let ls = null;
@@ -67,6 +67,35 @@ export function getHttpProtocol(config) {
     }
 }
 
+export function getServerInfo(config) {
+    if (config.servers && config.servers.length > 0) {
+        let server = config.servers.filter((server) => server.default);
+        if (server && server.length > 0) {
+            return { address: server[0].address, port: server[0].port };
+        } else {
+            return null;
+        }
+    } else {
+        return null;
+    }
+}
+
+export function buildHttpProtocol(config) {
+    if (config.servers && config.servers.length > 0) {
+        let idx = 0;
+        return config.servers
+                     .map(_server => {
+                         return {
+                             addr: [_server.protocol, "://", _server.address, ":", _server.port].join(''),
+                             authentification: _server.authentification,
+                             key : idx++
+                         }
+                     })
+    } else {
+        return null;
+    }
+}
+
 export function getCurrentDefaultServer(config) {
     if (config.servers && config.servers.length > 0) {
         let server = config.servers.filter((server) => server.default);
@@ -80,35 +109,86 @@ export function getCurrentDefaultServer(config) {
     }
 }
 
-export function errorHandler(xhr, textStatus, errorThrown, props) {
+export function errorHandler(xhr, textStatus, errorThrown, props, name, isSave) {
 
     if (xhr.readyState === 4) {
         if (xhr.responseJSON) {
             if (xhr.responseJSON.resultCode === "401") {
-                props.pushMessage("unauthorized", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
+
+                if (isSave) {
+                    saveErrorLog(name, xhr.responseJSON.resultCode, xhr.responseJSON.message);
+                } else {
+                    props.pushMessage("unauthorized", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
+                    props.setControlVisibility("Message", true);
+                }
+
+            } else {
+                if (isSave) {
+                    saveErrorLog(name, xhr.responseJSON.resultCode, xhr.responseJSON.message);
+                } else {
+                    props.pushMessage("error", "ERROR - "+ xhr.responseJSON.resultCode, xhr.responseJSON.message);
+                    props.setControlVisibility("Message", true);
+                }
+            }
+        } else if (xhr.responseText) {
+            if (isSave) {
+                saveErrorLog(name, xhr.statusText, xhr.responseText);
+            } else {
+                props.pushMessage("error", "ERROR - " + xhr.statusText, xhr.responseText);
                 props.setControlVisibility("Message", true);
+            }
+        }
+    }
+    else if (xhr.readyState === 0) {
+
+        if (isSave) {
+            saveErrorLog(name, "ERROR", "CAN'T CONNECT TO SERVER");
+        } else {
+            props.pushMessage("error", "ERROR", "CAN'T CONNECT TO SERVER");
+            props.setControlVisibility("Message", true);
+        }
+    }
+    else {
+        if (xhr.responseJSON) {
+
+            if (isSave) {
+                saveErrorLog(name, xhr.responseJSON.resultCode, xhr.responseJSON.message);
             } else {
                 props.pushMessage("error", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
                 props.setControlVisibility("Message", true);
             }
+
         } else if (xhr.responseText) {
-            props.pushMessage("error", "ERROR - " + xhr.statusText, xhr.responseText);
-            props.setControlVisibility("Message", true);
+
+            if (isSave) {
+                saveErrorLog(name, xhr.statusText, xhr.responseText);
+            } else {
+                props.pushMessage("error", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
+                props.setControlVisibility("Message", true);
+            }
         }
     }
-    else if (xhr.readyState === 0) {
-        props.pushMessage("error", "ERROR", "CAN'T CONNECT TO SERVER");
-        props.setControlVisibility("Message", true);
-    }
-    else {
-        if (xhr.responseJSON) {
-            props.pushMessage("error", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
-            props.setControlVisibility("Message", true);
-        } else if (xhr.responseText) {
-            props.pushMessage("error", "ERROR - " + xhr.responseJSON.resultCode, xhr.responseJSON.message);
-            props.setControlVisibility("Message", true);
+}
+
+// Save to LocalStorage only 20
+export function saveErrorLog(name, resultCode, resultMsg) {
+
+    let errorLog = [{name:name, code:resultCode, msg:resultMsg}];
+    console.error(errorLog);
+
+    let savedLog = getData("errorLog");
+    let finalLog = errorLog;
+
+    if(savedLog !== null) {
+
+        if(Object.keys(savedLog).length >= 20) {
+            savedLog.splice(0,1);
         }
+
+        finalLog = savedLog.concat(errorLog);
     }
+
+    setData("errorLog", finalLog);
 }
 
 export function getWithCredentials(config) {
@@ -265,6 +345,25 @@ export function getParam(props, key) {
     }
 }
 
+export function setXlogfilterToUrl (props, filter) {
+
+    let search = new URLSearchParams(props.location.search);
+
+    if(filter === null) {
+        search.delete("xlogfilter");
+    }else{
+        search.set("xlogfilter", JSON.stringify(filter));
+    }
+
+    if (props.location.search !== ("?" + search.toString())) {
+        props.history.replace({
+          pathname: props.location.pathname,
+          search: "?" + search.toString()
+        });
+    }
+
+}
+
 export function setRangePropsToUrl (props, pathname, objects) {
     let search = new URLSearchParams(props.location.search);
 
@@ -296,6 +395,7 @@ export function setRangePropsToUrl (props, pathname, objects) {
 
     search.set("from", from.format("YYYYMMDDHHmmss"));
     search.set("to", to.format("YYYYMMDDHHmmss"));
+    search.set("fromPast", props.range.fromPast);
 
     if (props.location.search !== ("?" + search.toString())) {
         if (pathname) {
@@ -321,6 +421,94 @@ export function setTxidPropsToUrl (props, txiddate, txid) {
     } else {
         search.delete("txiddate");
         search.delete("txid");
+    }
+
+    if (props.location.search !== ("?" + search.toString())) {
+        props.history.replace({
+            pathname: props.location.pathname,
+            search: "?" + search.toString()
+        });
+    }
+}
+
+export function setTargetServerToUrl (props, config, anotherParam) {
+    const server = getServerInfo(config);
+    if (server && server.address) {
+        setTargetServerToUrl0(props, server.address, server.port, server.protocol, anotherParam);
+    }
+}
+
+const ALL_OPTIONS_OF_SERVER_KEY = "allOptionsOfServer";
+
+export function clearAllUrlParamOfPaper (props, config) {
+    props.history.push({
+        pathname: props.location.pathname
+    });
+}
+
+export function replaceAllLocalSettingsForServerChange (currentServer, props, config) {
+    if (currentServer && currentServer.address) {
+        saveCurrentAllLocalSettings(currentServer, config);
+        reloadAllLocalSettingsOfServer(props, config);
+    }
+}
+
+export function saveCurrentAllLocalSettings (currentServer, config) {
+    const serverKey = currentServer.address + ":" + currentServer.port;
+
+    const option = {
+        server: serverKey,
+        options: {
+            selectedObjects : getData("selectedObjects"),
+            templateName : getData("templateName"),
+            layouts : getData("layouts"),
+            boxes : getData("boxes"),
+            preset : getData("preset"),
+            profileOptions : getData("profileOptions"),
+            topologyPosition : getData("topologyPosition"),
+            topologyOptions : getData("topologyOptions"),
+            alert : getData("alert")
+        }
+    };
+
+    const allOptionsOfServer = getData(ALL_OPTIONS_OF_SERVER_KEY) || [];
+    let allOptions = allOptionsOfServer.filter(option => option.server !== serverKey);
+    allOptions.push(option);
+
+    setData(ALL_OPTIONS_OF_SERVER_KEY, allOptions);
+}
+
+export function reloadAllLocalSettingsOfServer (props, config) {
+    const server = getServerInfo(config);
+    if (server && server.address) {
+        const serverKey = server.address + ":" + server.port;
+        const allOptionsOfServer = getData(ALL_OPTIONS_OF_SERVER_KEY) || [];
+        const option = allOptionsOfServer.filter(option => option["server"] === serverKey);
+
+        if (option && option[0] && option[0].options) {
+            setData("selectedObjects", option[0].options["selectedObjects"]);
+            setData("templateName", option[0].options["templateName"]);
+            setData("layouts", option[0].options["layouts"]);
+            setData("boxes", option[0].options["boxes"]);
+            setData("preset", option[0].options["preset"]);
+            setData("profileOptions", option[0].options["profileOptions"]);
+            setData("topologyPosition", option[0].options["topologyPosition"]);
+            setData("topologyOptions", option[0].options["topologyOptions"]);
+            setData("alert", option[0].options["alert"]);
+        }
+    }
+}
+
+export function setTargetServerToUrl0 (props, serverAddr, serverPort, protocol, anotherParam) {
+    let search = new URLSearchParams(props.location.search);
+
+    search.set("address", serverAddr);
+    search.set("port", serverPort);
+    search.set("protocol", protocol || "http");
+    for (let key in anotherParam) {
+        if (anotherParam[key]) {
+            search.set(key, anotherParam[key]);
+        }
     }
 
     if (props.location.search !== ("?" + search.toString())) {
@@ -393,6 +581,7 @@ export async function getFilteredData0(xlogs, filter, props) {
     let data = [];
     let temp = [];
 
+    // 서버에서 가져온 데이터를 필터로 정제...
     xlogs.forEach(async xlog => {
         if(dicts.size > Dictionary.bulkSize) {
             await Dictionary.record(dicts, props, moment(new Date(Number(data[data.length].endTime))).format("YYYYMMDD"));
@@ -431,6 +620,7 @@ export async function getFilteredData0(xlogs, filter, props) {
     return data;
 }
 
+// 서버에서 가져온 데이터와 필터 값과의 비교하는 함수
 export function getFilteredData (xlogs, filter) {
     let datas = xlogs;
 
@@ -494,6 +684,67 @@ export function getFilteredData (xlogs, filter) {
                     : d.userAgent === String(hash(filter.userAgent));
             });
         }
+
+        // filter - text
+        if (filter.text1) {
+            datas = datas.filter((d) => d.text1 === filter.text1);
+        }
+
+        if (filter.text2) {
+            datas = datas.filter((d) => d.text2 === filter.text2);
+        }
+
+        if (filter.text3) {
+            datas = datas.filter((d) => d.text3 === filter.text3);
+        }
+
+        if (filter.text4) {
+            datas = datas.filter((d) => d.text4 === filter.text4);
+        }
+
+        if (filter.text5) {
+            datas = datas.filter((d) => d.text5 === filter.text5);
+        }
+
+        // filter - profile count
+        if (filter.profileCountFrom) {
+            datas = datas.filter((d) => Number(d.profileCount) >= filter.profileCountFrom);
+        }
+
+        // filter - profile count
+        if (filter.profileCountFrom && filter.profileCountTo) {
+            datas = datas.filter((d) => (Number(d.profileCount) >= filter.profileCountFrom && Number(d.profileCount) <= filter.profileCountTo));
+        }
+
+        // filter - start Hms
+        if (filter.startHmsFrom && filter.startHmsTo) {
+            let dm = dateMillis(filter.startHmsFrom, filter.startHmsTo);
+            if(dm !== null) {
+                  const [startFilter,endFilter] = dm.split(':');
+                   datas = datas.filter((d) => {
+                       const _startTime = Number(d.endTime) - Number(d.elapsed);
+                       return _startTime >= Number(startFilter) && _startTime <= Number(endFilter);
+                   });
+
+            }
+        }
+
+        switch (filter.hasDump) {
+
+            case "Y" : {
+                datas = datas.filter((d) => d.hasDump === "1");
+                break;
+            }
+
+            case "N" : {
+                datas = datas.filter((d) => d.hasDump === "0");
+                break;
+            }
+
+            default : {
+                break;
+            }
+        }
         
         switch (filter.type) {
             case "ERROR" : {
@@ -514,10 +765,30 @@ export function getFilteredData (xlogs, filter) {
             default : {
                 break;
             }
-        }            
+        }
+
     }
 
     return datas;
+}
+
+// from date string to millisecond
+export function dateMillis(startHmsFrom, startHmsTo) {
+
+    let dateObj = new Date();
+    let month = dateObj.getMonth();
+    let day = dateObj.getDate();
+    let year = dateObj.getFullYear();
+
+    let startFromTokens = startHmsFrom.split(":");
+    let startToTokens = startHmsTo.split(":");
+
+    let startFrom = (new Date(year, month, day, Number(startFromTokens[0]), Number(startFromTokens[1]), Number(startFromTokens[0]))).getTime();
+    let startTo = (new Date(year, month, day, Number(startToTokens[0]), Number(startToTokens[1]), Number(startToTokens[0]))).getTime();
+
+    if(isNaN(startFrom) || isNaN(startTo))
+        return null;
+    return startFrom + ":" + startTo;
 }
 
 export function updateQueryStringParameter(uri, key, value) {
@@ -529,4 +800,17 @@ export function updateQueryStringParameter(uri, key, value) {
     else {
         return uri + separator + key + "=" + value;
     }
+}
+export function confBuilder(addr,conf,user,serverId){
+    return {
+        addr  : addr,
+        conf  : conf,
+        user  : user,
+        serverId : serverId
+    }
+}
+
+export function timeMiToMs(min){
+    return min * 60 * 1000;
+
 }

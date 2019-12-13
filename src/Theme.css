@@ -78,6 +78,10 @@ html.theme-gray {
     stroke: #deffba;
 }
 
+/* THEME, topology-chart.css */
+.theme-gray .topology-wrapper .tooltip-group{
+    color: #111;
+}
 
 /* THEME, Login.css */
 .theme-gray .login-wrapper .login-box {
@@ -144,6 +148,16 @@ html.theme-gray, .theme-gray body {
 
 .theme-gray button i.fa {
     color: white;
+}
+
+.theme-gray .scrollbar::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.theme-gray .scrollbar::-webkit-scrollbar-thumb {
+    background-color: #FCDC3B;
 }
 
 /* THEME, Menu.css */
@@ -285,6 +299,9 @@ html.theme-gray, .theme-gray body {
 .theme-gray .frame-profile div.xlog-data span.label {
     background-color: #111;
 }
+.theme-gray .frame-profile div.time-ratio{
+    background-color: #111;
+}
 
 .theme-gray .frame-xlog-steps .step {
     background-color: #111;
@@ -318,4 +335,36 @@ html.theme-gray, .theme-gray body {
 .theme-gray .frame-profile-step-detail .sub-detail-title .sql-btns > div {
     background-color: rgba(255,255,255,0.4);
     color: white;
+}
+
+/* ProfileList.css */
+.xlog-profile-list > div.header.row.fixed > span {
+    position: sticky;
+    top: 0;
+    background-color: #F2F2F2;
+}
+
+.theme-gray .xlog-profile-list > div.header.row.fixed > span {
+    position: sticky;
+    top: 0;
+    background-color: #111;
+}
+
+.theme-gray div.xlog-flow > div.contents {
+    background-color: #666;
+}
+.theme-gray div.xlog-flow-content > div.contents > div.flow-data span{
+    color : #333;
+}
+.theme-gray div.xlog-flow-content > div.contents > div.flow-data span.data.txid {
+    color : #7B3E81;
+}
+.theme-gray div.xlog-flow-content > div.contents > div.type > div.info{
+    color : #333;
+}
+.theme-gray div.xlog-flow-content > div.contents > div.error > div.info{
+    color : red;
+}
+.theme-gray div.active-speed-content > div.row:hover{
+    color : #333;
 }

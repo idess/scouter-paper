@@ -96,7 +96,7 @@ class App extends Component {
                 this.props.pushMessage("error", "CHECK SETTINGS", "current setting does not require authentication, but it actually requires authentication.");
                 this.props.setControlVisibility("Message", true);
             } else {
-                errorHandler(xhr, textStatus, errorThrown, this.props);
+                errorHandler(xhr, textStatus, errorThrown, this.props, "info", true);
             }
             localStorage.removeItem("user");
         }).always(() => {
@@ -247,7 +247,7 @@ class App extends Component {
                 }).fail((xhr, textStatus, errorThrown) => {
                     clearInterval(this.alertTimer);
                     this.alertTimer = null;
-                    errorHandler(xhr, textStatus, errorThrown, this.props);
+                    errorHandler(xhr, textStatus, errorThrown, this.props, "getRealTimeAlert", true);
                 });
             });
         }
@@ -274,7 +274,7 @@ class App extends Component {
                     this.props.pushMessage("error", "Not Supported", "failed to get matrix information. paper 2.0 is available only on scouter 2.0 and later.");
                     this.props.setControlVisibility("Message", true);
                 } else {
-                    errorHandler(xhr, textStatus, errorThrown, this.props);
+                    errorHandler(xhr, textStatus, errorThrown, this.props, "getCounterModel", true);
                 }
             }
         });
@@ -311,6 +311,10 @@ class App extends Component {
         if (str) {
             config = JSON.parse(str);
             config = mergeDeep(this.props.config, config); //for added config's properties on later versions.
+
+            if (config.fonts && config.fonts.filter(d => d.val === "NanumSquare").length < 1) {
+                config.fonts.unshift({val : "NanumSquare",name : "NanumSquare", generic: "sans-serif", type : "display"});
+            }
             localStorage.setItem("config", JSON.stringify(config));
         } else {
             config = this.props.config;
@@ -327,7 +331,9 @@ class App extends Component {
             let found = false;
             for (let i=0; i<config.servers.length; i++) {
                 let server = config.servers[i];
-                if (server.protocol === paramProtocol && server.address === paramAddress && String(server.port) === String(paramPort) && server.authentification === paramAuthentification) {
+                if (server.protocol === paramProtocol && server.address === paramAddress
+                    && String(server.port) === String(paramPort))
+                {
                     found = true;
                     server.default = true;
                 } else {
@@ -351,6 +357,11 @@ class App extends Component {
                 server.name = server.protocol + "://" + server.address + ":" + server.port
             });
         }
+        const paramXlogClassicMode = common.getParam(this.props,"xlogClassicMode");
+        if(paramXlogClassicMode && ( paramXlogClassicMode === 'Y' ||  paramXlogClassicMode === 'N')){
+            config.others.xlogClassicMode = paramXlogClassicMode;
+        }
+
 
         this.props.setConfig(config);
         if (localStorage) {
@@ -450,7 +461,7 @@ class App extends Component {
         css.innerHTML += "html,body,svg text,input,select,button { font-family: '" + fontSetting.basic + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.basic) + "; }";
         css.innerHTML += ".layout-manager .content-ilst { font-family: '" + fontSetting.basic + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.basic) + "; }";
         css.innerHTML += ".instance-selector .list-content { font-family: '" + fontSetting.basic + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.basic) + "; }";
-        css.innerHTML += "svg text { font-family: '" + fontSetting.axis + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.axis) + "; }";
+        css.innerHTML += `svg text { font-family: '${fontSetting.axis}','Nanum Gothic',${this.getFontGeneric(fontSetting.axis)}; font-size: ${fontSetting.axisFontSize}; }`;
         css.innerHTML += ".tooltip { font-family: '" + fontSetting.tooltip + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.tooltip) + "; }";
         css.innerHTML += ".xlog-profiler { font-family: '" + fontSetting.profiler + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.profiler) + "; }";
         css.innerHTML += ".menu-div { font-family: '" + fontSetting.menu + "','Nanum Gothic'," + this.getFontGeneric(fontSetting.menu) + "; }";

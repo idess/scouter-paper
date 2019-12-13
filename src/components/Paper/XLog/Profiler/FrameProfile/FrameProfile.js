@@ -1,6 +1,7 @@
 import React, {Component} from 'react';
 import './FrameProfile.css';
 import FrameStepDetail from "./FrameStepDetail/FrameStepDetail";
+import XlogFlow from "./XlogFlow/XlogFlow";
 import {connect} from 'react-redux';
 import {withRouter} from 'react-router-dom';
 import * as d3 from "d3";
@@ -8,6 +9,7 @@ import numeral from "numeral";
 import moment from "moment";
 import {profileMetas} from "./meta"
 import {IdAbbr} from "../../../../../common/idAbbr";
+import TimeRatio from './TimeRatio';
 
 class FrameProfile extends Component {
 
@@ -29,7 +31,11 @@ class FrameProfile extends Component {
 
         this.state = {
             selectedStepIndex: null,
-            lastResizeTime : null
+            lastResizeTime : null,
+            flow : {
+                show : false,
+                parameter : {}
+            }
         };
     }
 
@@ -41,9 +47,19 @@ class FrameProfile extends Component {
 
     componentWillReceiveProps(nextProps) {
         this.init(nextProps);
-        if (nextProps.listWidth !== this.props.listWidth) {
+        if (nextProps.rightWidth !== this.props.rightWidth) {
             this.resize();
         }
+        if(nextProps.steps !== this.props.steps){
+            this.setState({
+                selectedStepIndex: null,
+                flow : {
+                    show : false,
+                    parameter : {}
+                }
+            })
+        }
+
     }
 
     init = (props) => {
@@ -249,6 +265,11 @@ class FrameProfile extends Component {
             selectedStepIndex: index
         });
     };
+    showFlowClose =(flow) =>{
+        this.setState({
+            flow : flow
+        });
+    };
 
     //sql3 literal bind?
     getElapsedTime = (row) => {
@@ -406,13 +427,36 @@ class FrameProfile extends Component {
 
     };
 
+    boolTostr = (val="0") => {
+        switch (val) {
+            case "1": return "Y";
+            case "0": return "N";
+            default:
+                return "N";
+        }
+    };
+    onClickTxToXFlow=(gxid,txid,caller,endtime,clickId ) =>{
+        const yyyymmdd = moment(new Date(Number(endtime))).format("YYYYMMDD");
+        this.setState({
+            flow : {
+                show : true,
+                parameter : {
+                    gxid : gxid,
+                    txid : txid,
+                    caller : caller,
+                    yyyymmdd : yyyymmdd,
+                    isGX : clickId === "Gxid"
+                }
+            }
+        });
+
+    };
 
     render() {
         let nav = null;
         if (this.props.profile) {
             nav = this.getNavData(this.props.profile.endTime, this.props.profile.gxid, this.props.profile.caller, this.props.profile.txid, this.props.steps);
         }
-
         return (
             <div className='frame-profile'>
                 <div className={"sub-title " + (this.props.narrow ? 'narrow' : '')}>GENERAL INFO</div>
@@ -435,21 +479,43 @@ class FrameProfile extends Component {
                         </span>
                     </div>
                     }
+                    {
+                        this.props.profile && ['Txid','Gxid'].map(k=>{
+                            return <div key={k}>
+                                <span className="label">{k}</span>
+                                <span className="data tx-link" onClick={()=>{
+                                    const { gxid,txid,caller,endTime } = this.props.profile;
+                                    this.onClickTxToXFlow(gxid,txid,caller,endTime,k);
+                                }}>{IdAbbr.abbr(this.props.profile[k.toLowerCase()])}</span>
+                            </div>
+                        })
+                    }
+
                     {this.props.profile && profileMetas && profileMetas.filter((d) => {
-                        return this.props.summary ? d.show : true
+                        return this.props.summary ? (d.show && this.props.profile[d.key] ) : true
                     }).map((meta, i) => {
                         return <div key={i}>
                             <span className="label">{meta.name}</span>
                             <span className={"data " + (meta.name.toLowerCase() === "error" ? "error" : "")}>
                                 {meta.type === "datetime" && d3.timeFormat(this.fullTimeFormat)(new Date(Number(this.props.profile[meta.key])))}
-                                {meta.type === "ms" && numeral(this.props.profile[meta.key]).format(this.props.config.numberFormat) + " ms"}
-                                {meta.type === "bytes" && numeral(this.props.profile[meta.key]).format(this.props.config.numberFormat + "b")}
+                                {meta.type === "ms" && `${numeral(this.props.profile[meta.key]).format(this.props.config.numberFormat)} ms`}
+                                {meta.type === "bytes" && `${numeral(this.props.profile[meta.key]).format(this.props.config.numberFormat)} b`}
                                 {meta.type === "number" && numeral(this.props.profile[meta.key]).format(this.props.config.numberFormat)}
-                                {(meta.type !== "datetime" && meta.type !== "ms" && meta.type !== "bytes" && meta.type !== "number") && this.props.profile[meta.key]}
+                                {meta.type === "boolean" && this.boolTostr(this.props.profile[meta.key]) }
+                                {(meta.type !== "datetime" && meta.type !== "ms" && meta.type !== "bytes" && meta.type !== "number" && meta.type !== "boolean") && this.props.profile[meta.key]}
                             </span>
                         </div>
                     })}
                 </div>
+                {
+                    this.props.profile && 
+                    <TimeRatio cpu={this.props.profile.cpu} 
+                        sql={this.props.profile.sqlTime} 
+                        api={this.props.profile.apicallTime} 
+                        elapsed={this.props.profile.elapsed}/>
+                }
+                
+                
                 <div className="sub-title">PROFILE STEP</div>
                 {/*<div className={"xlog-steps " + (this.props.wrap ? 'wrap' : '') + (this.props.narrow ? 'narrow' : '')}>*/}
                 <div className={"frame-graph " + (this.props.narrow ? 'narrow' : '')}>
@@ -544,7 +610,18 @@ class FrameProfile extends Component {
                                          toggleFormatter={this.props.toggleFormatter} toggleBind={this.props.toggleBind}
                                          toggleWrap={this.props.toggleWrap}></FrameStepDetail>
                     </div>
-                </div>}
+                </div>
+                }
+                {
+                    this.state.flow.show &&
+                        <div className="frame-xlog-flow">
+                            <div>
+                                <XlogFlow flow={this.state.flow} close={this.showFlowClose} doubleClick={this.props.rowClick} >
+                                </XlogFlow>
+                            </div>
+                        </div>
+                }
+
             </div>
         );
     }
