@@ -22,16 +22,25 @@ class Menu extends Component {
             showAlert: false
         };
     }
-
+    componentWillReceiveProps(nextProps) {
+        const {pathname}= nextProps.location;
+        if( pathname !== this.props.pathname){
+            this.setState({
+                menu: pathname
+            });
+            this.props.setMenu(pathname);
+        }
+    }
     componentDidMount() {
         this.setState({
             menu: this.props.location.pathname
         });
         this.props.setMenu(this.props.location.pathname);
-
         if (this.props.config.alert.notification === "Y") {
-            if (Notification && (Notification.permission !== "granted" || Notification.permission === "denied")) {
-                Notification.requestPermission();
+            if( typeof Notification === 'function' && Notification.hasOwnProperty('permission')) {
+                if( Notification.permission !== "granted" || Notification.permission === "denied") {
+                    Notification.requestPermission();
+                }
             }
         }
     }
@@ -208,9 +217,16 @@ class Menu extends Component {
                         </div>
                     </NavLink>
                     }
-                    <div className="alert-btn menu-item right" data-count={this.props.alert.data.length > 99 ? "99+" : this.props.alert.data.length} onClick={this.toggleShowAlert} data-tip="CLICK TO SHOW ALERT">
-                        <span className={"alert-icon " + (this.props.alert.data.length > 0 ? "has-alert" : "")}><i className="fa fa-exclamation-circle" aria-hidden="true"></i></span>
+                    <div className="right-panel">
+                        <div className="template-name">
+                            <div className="preset">{this.props.templateName ? this.props.templateName.preset : null}</div>
+                            <div className="layout">{this.props.templateName ? this.props.templateName.layout : null}</div>
+                        </div>
+                        <div className="alert-btn menu-item" data-count={this.props.alert.data.length > 99 ? "99+" : this.props.alert.data.length} onClick={this.toggleShowAlert} data-tip="CLICK TO SHOW ALERT">
+                            <span className={"alert-icon " + (this.props.alert.data.length > 0 ? "has-alert" : "")}><i className="fa fa-exclamation-circle" aria-hidden="true"></i></span>
+                        </div>
                     </div>
+                    
                 </div>
                 <div className="bar"></div>
                 <AlertList alert={this.props.alert} show={this.state.showAlert} setRewind={this.setRewind} clearAllAlert={this.clearAllAlert} clearOneAlert={this.clearOneAlert} />
@@ -224,7 +240,8 @@ let mapStateToProps = (state) => {
         objects: state.target.objects,
         config: state.config,
         user: state.user,
-        alert: state.alert
+        alert: state.alert,
+        templateName: state.templateName
     };
 };
 

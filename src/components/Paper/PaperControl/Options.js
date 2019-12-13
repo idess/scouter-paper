@@ -54,7 +54,14 @@ export function options() {
                     type: "selector",
                     data: ["Y", "N"],
                     value: "N"
+                },
+                showClassicMode : {
+                    name :'CLASSIC MODE',
+                    type: "selector",
+                    data: ["Y", "N"],
+                    value: "N"
                 }
+
             }
         },
         visitor: {
@@ -90,6 +97,15 @@ export function options() {
                 }
             }
         },
+        diskUsage: {
+            icon: "fa-hdd-o",
+            mode: "exclusive",
+            type: "diskUsage",
+            title: "Disk Usage",
+            config: {
+
+            }
+        },
         activeSpeed: {
             icon: "fa-bars",
             mode: "exclusive",
@@ -123,7 +139,23 @@ export function options() {
                     value: false
                 }
             }
-        }/*,
+        },
+        lineChart: {
+            icon: "fa-line-chart",
+            mode: "nonexclusive",
+            type: "counter",
+            title: "LINE CHART",
+            config: {
+                chartType : {
+                    name: "Chart Type",
+                    type: "selector",
+                    data: ["LINE", "LINE FILL", "STACK AREA"],
+                    value: "LINE"
+                }
+            }
+        }
+
+        /*,
         WAS: [
             {
                 text: "TPS",

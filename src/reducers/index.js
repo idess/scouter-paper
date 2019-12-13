@@ -1,4 +1,48 @@
-import {SET_ACTIVE_SERVICE,SET_MENU, SET_BOXES_LAYOUTS, SET_LAYOUTS, SET_BOXES, SET_LAYOUT_CHANGETIME, SET_SUPPORTED, ADD_REQUEST, SET_CONFIG, SET_USER_ID, SET_USER_DATA, SET_TARGET, PUSH_MESSAGE, SET_CONTROL_VISIBILITY, CLEAR_ALL_MESSAGE, SET_BG_COLOR, SET_SELECTION, SET_TEMPLATE, SET_REAL_TIME, SET_RANGE_DATE, SET_RANGE_HOURS, SET_RANGE_MINUTES, SET_RANGE_VALUE, SET_REAL_TIME_VALUE, SET_RANGE_DATE_HOURS_MINUTES, SET_REAL_TIME_RANGE_STEP_VALUE, SET_RANGE_DATE_HOURS_MINUTES_VALUE, SET_RANGE_ALL, SET_COUNTER_INFO, SET_CONTROLLER_STATE, SET_CONTROLLER_PIN, SET_FILTER_MAP, ADD_FILTERED_OBJECT, REMOVE_FILTERED_OBJECT, SET_SEARCH_CONDITION, SET_TOPOLOGY_OPTION, SET_ALERT, SET_BREAKPOINT} from '../actions';
+import {
+    SET_ACTIVE_SERVICE,
+    SET_MENU,
+    SET_BOXES_LAYOUTS,
+    SET_LAYOUTS,
+    SET_BOXES,
+    SET_LAYOUT_CHANGETIME,
+    SET_SUPPORTED,
+    ADD_REQUEST,
+    SET_CONFIG,
+    SET_USER_ID,
+    SET_USER_DATA,
+    SET_TARGET,
+    PUSH_MESSAGE,
+    SET_CONTROL_VISIBILITY,
+    CLEAR_ALL_MESSAGE,
+    SET_BG_COLOR,
+    SET_SELECTION,
+    SET_TEMPLATE,
+    SET_REAL_TIME,
+    SET_RANGE_DATE,
+    SET_RANGE_HOURS,
+    SET_RANGE_MINUTES,
+    SET_RANGE_VALUE,
+    SET_REAL_TIME_VALUE,
+    SET_FROM_PAST,
+    SET_RANGE_DATE_HOURS_MINUTES,
+    SET_REAL_TIME_RANGE_STEP_VALUE,
+    SET_RANGE_DATE_HOURS_MINUTES_VALUE,
+    SET_RANGE_ALL,
+    SET_COUNTER_INFO,
+    SET_CONTROLLER_STATE,
+    SET_CONTROLLER_PIN,
+    SET_FILTER_MAP,
+    ADD_FILTERED_OBJECT,
+    REMOVE_FILTERED_OBJECT,
+    SET_SEARCH_CONDITION,
+    SET_TOPOLOGY_OPTION,
+    SET_ALERT,
+    SET_BREAKPOINT,
+    SET_TEMPLATE_NAME,
+    SET_PRESET_NAME,
+    SET_LAYOUT_NAME,
+    SET_TIME_FOCUS,
+} from '../actions';
 import {combineReducers} from 'redux';
 import moment from 'moment';
 const configState = {
@@ -12,7 +56,9 @@ const configState = {
         }
     ],
     interval: 2000,
-    preload: "N",
+    realTimeLastRange : 10,
+    realTimeXLogLastRange : 10,
+    preload: "Y",
     alertInterval : 60,
     numberFormat: "0,0.0",
     decimalPoint: 1,
@@ -24,7 +70,7 @@ const configState = {
     graph : {
         color : "instance",
         width : 2,
-        opacity : 0.7,
+        opacity : 1,
         fill : "N",
         fillOpacity : 0.4,
         curve : "curveCatmullRom",
@@ -40,16 +86,34 @@ const configState = {
         longHistoryStep : 60
     },
     xlog: {
-        normal: {
+        classicMode: {
             rows: 5,
             columns: 5,
-            opacity : 0.7,
+            opacity : 1.0,
             sampling : 100,
             fills: {
+                D_0_0: {
+                    color: "#0062B1"
+                },
                 D_0_2: {
                     color: "#0062B1"
                 },
+                D_0_3: {
+                    color: "#0062B1"
+                },
+                D_0_4: {
+                    color: "#0062B1"
+                },
+                D_1_0: {
+                    color: "#0062B1"
+                },
+                D_1_1: {
+                    color: "#0062B1"
+                },
                 D_1_2: {
+                    color: "#0062B1"
+                },
+                D_1_3: {
                     color: "#0062B1"
                 },
                 D_2_0: {
@@ -67,10 +131,63 @@ const configState = {
                 D_2_4: {
                     color: "#0062B1"
                 },
+                D_3_1: {
+                    color: "#0062B1"
+                },
                 D_3_2: {
                     color: "#0062B1"
                 },
+                D_3_3: {
+                    color: "#0062B1"
+                },
+                D_3_4: {
+                    color: "#0062B1"
+                },
+                D_4_0: {
+                    color: "#0062B1"
+                },
+                D_4_1: {
+                    color: "#0062B1"
+                },
                 D_4_2: {
+                    color: "#0062B1"
+                },
+                D_4_4: {
+                    color: "#0062B1"
+                }
+            }
+        },
+        normal: {
+            rows: 5,
+            columns: 5,
+            opacity : 0.7,
+            sampling : 100,
+            fills: {
+                D_0_0: {
+                    color: "#0062B1"
+                },
+                D_0_4: {
+                    color: "#0062B1"
+                },
+                D_1_1: {
+                    color: "#0062B1"
+                },
+                D_1_3: {
+                    color: "#0062B1"
+                },
+                D_2_2: {
+                    color: "#0062B1"
+                },
+                D_3_1: {
+                    color: "#0062B1"
+                },
+                D_3_3: {
+                    color: "#0062B1"
+                },
+                D_4_0: {
+                    color: "#0062B1"
+                },
+                D_4_4: {
                     color: "#0062B1"
                 }
             }
@@ -81,31 +198,31 @@ const configState = {
             opacity : 0.7,
             sampling : 100,
             fills: {
-                D_0_2: {
+                D_0_0: {
                     color: "#888"
                 },
-                D_1_2: {
+                D_0_4: {
                     color: "#888"
                 },
-                D_2_0: {
+                D_1_1: {
                     color: "#888"
                 },
-                D_2_1: {
+                D_1_3: {
                     color: "#888"
                 },
                 D_2_2: {
                     color: "#888"
                 },
-                D_2_3: {
+                D_3_1: {
                     color: "#888"
                 },
-                D_2_4: {
+                D_3_3: {
                     color: "#888"
                 },
-                D_3_2: {
+                D_4_0: {
                     color: "#888"
                 },
-                D_4_2: {
+                D_4_4: {
                     color: "#888"
                 }
             }
@@ -116,37 +233,38 @@ const configState = {
             opacity : 0.7,
             sampling : 100,
             fills: {
-                D_0_2: {
+                D_0_0: {
                     color: "#9F0500"
                 },
-                D_1_2: {
+                D_0_4: {
                     color: "#9F0500"
                 },
-                D_2_0: {
+                D_1_1: {
                     color: "#9F0500"
                 },
-                D_2_1: {
+                D_1_3: {
                     color: "#9F0500"
                 },
                 D_2_2: {
                     color: "#9F0500"
                 },
-                D_2_3: {
+                D_3_1: {
                     color: "#9F0500"
                 },
-                D_2_4: {
+                D_3_3: {
                     color: "#9F0500"
                 },
-                D_3_2: {
+                D_4_0: {
                     color: "#9F0500"
                 },
-                D_4_2: {
+                D_4_4: {
                     color: "#9F0500"
                 }
             }
         }
     },
     fonts : [
+        {val : "NanumSquare",name : "NanumSquare", generic: "sans-serif", type : "display"},
         {val : "Bungee",name : "Bungee", generic: "cursive", type : "display"},
         {val : "Righteous",name : "Righteous", generic : "cursive", type : "display"},
         {val : "Mina",name : "Mina", generic : "sans-serif", type : "sans-serif"},
@@ -158,16 +276,18 @@ const configState = {
         {val : "Kavivanar",name : "Kavivanar", generic : "cursive", type : "Handwriting"},
         {val : "Handlee",name : "Handlee", generic : "cursive", type : "Handwriting"}],
     fontSetting : {
-        basic : "Righteous",
+        basic : "NanumSquare",
         menu : "Bungee",
         axis : "Bungee",
-        tooltip : "Righteous",
-        profiler : "Righteous"
+        axisFontSize : "8px",
+        tooltip : "NanumSquare",
+        profiler : "NanumSquare"
     },
     others : {
         checkUpdate : "Y",
-        errorReport : "Y"
-    },
+        errorReport : "Y",
+        xlogClassicMode : "N",
+    }
 };
 
 const config = (state = configState, action) => {
@@ -435,6 +555,7 @@ const paper = (state = paperState, action) => {
     }
 };
 
+
 const searchConditionState = {
     from: null,
     to : null,
@@ -460,6 +581,7 @@ const rangeState = {
     minutes : now.minutes(),
     value : configState.range.shortHistoryStep,
     realTime : true,
+    fromPast : true,
     longTerm : false,
     range : configState.range.shortHistoryRange,
     step : configState.range.shortHistoryStep
@@ -493,9 +615,11 @@ const range = (state = rangeState, action) => {
         case SET_RANGE_DATE_HOURS_MINUTES:
             return Object.assign({}, state, {date : action.date, hours : action.hours, minutes : action.minutes});
         case SET_RANGE_DATE_HOURS_MINUTES_VALUE:
-            return Object.assign({}, state, {date : action.date, hours : action.hours, minutes : action.minutes, value : action.value});
+            return Object.assign({}, state, {date : action.date, hours : action.hours, minutes : action.minutes, value : action.value, fromPast : action.fromPast});
         case SET_RANGE_ALL:
             return Object.assign({}, state, {date : action.date, hours : action.hours, minutes : action.minutes, value : action.value, realTime : action.realTime, longTerm: action.longTerm, range : action.range, step : action.step});
+        case SET_FROM_PAST:
+            return Object.assign({}, state, {fromPast : action.fromPast});
         default:
             return state;
     }
@@ -518,13 +642,14 @@ const supported = (state = supportedState, action) => {
 let topologyOptionState = {
     tpsToLineSpeed : true,
     speedLevel : "fast",
-    redLine : false,
+    redLine : true,
     highlight : true,
     distance : 300,
     zoom : false,
-    pin : true,
+    pin : false,
     lastUpdateTime : null,
     grouping : true,
+    arcLine : false,
     nodeCount : 0,
     linkCount : 0
 };
@@ -568,6 +693,51 @@ const alert = (state = alertState, action) => {
     }
 };
 
+
+const templateNameState = {
+    preset: null,
+    layout: null
+};
+
+const templateName = (state = templateNameState, action) => {
+    switch (action.type) {
+        case SET_TEMPLATE_NAME:
+            return {
+                preset: action.preset,
+                layout: action.layout
+            }
+        case SET_PRESET_NAME:
+            return {
+                preset: action.preset,
+                layout: null
+            }
+        case SET_LAYOUT_NAME:
+            return Object.assign({}, state, {layout: action.layout});
+        default:
+            return state;
+    }
+};
+
+const timeFocusState = {
+    active : false,
+    time : null,
+    id : null,
+    keep : false,
+};
+
+const timeFocus =(state=timeFocusState, action ) =>{
+    switch (action.type) {
+        case SET_TIME_FOCUS:
+            return {
+                active : action.active,
+                time: action.time,
+                id: action.id,
+                keep : action.keep
+            };
+        default:
+            return state;
+    }
+};
 const scouterApp = combineReducers({
     supported,
     target,
@@ -583,7 +753,9 @@ const scouterApp = combineReducers({
     searchCondition,
     paper,
     topologyOption,
-    alert
+    alert,
+    templateName,
+    timeFocus
 });
 
 export default scouterApp;

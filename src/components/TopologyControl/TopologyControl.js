@@ -50,6 +50,10 @@ class TopologyControl extends Component {
     };
 
     changeDistance = (dir) => {
+        if (this.props.topologyOption.pin) {
+            return;
+        }
+
         let distance = this.props.topologyOption.distance;
         if (dir === "plus") {
             distance += 30;
@@ -69,6 +73,7 @@ class TopologyControl extends Component {
     };
 
     render() {
+
         return (
             <div className="topology-option-control">
                 <div className="controller noselect">
@@ -83,6 +88,13 @@ class TopologyControl extends Component {
                                  onClick={this.checkBtnClick.bind(this, "grouping")}>
                                 <span className="icon"><i className="fa fa-object-group" aria-hidden="true"></i></span>
                                 <span className="text">GROUPING</span>
+                            </div>
+                        </div>
+                        <div className="group">
+                            <div className={"check-btn " + (this.props.topologyOption.arcLine ? "on" : "off")}
+                                 onClick={()=>this.checkBtnClick("arcLine")}>
+                                <span className="icon"><i className="fa fa-arrow-circle-right" aria-hidden="true"></i></span>
+                                <span className="text">ARC LINE</span>
                             </div>
                         </div>
                         <div className="group">
@@ -138,12 +150,13 @@ class TopologyControl extends Component {
                                 <span className="text">RED LINE</span>
                             </div>
                         </div>
+
                         <div className="group">
-                            <div className="action-btn" onClick={this.changeDistance.bind(this, "minus")}>
+                            <div className={"action-btn " + (this.props.topologyOption.pin ? "disabled" : "")} onClick={this.changeDistance.bind(this, "minus")}>
                                 <span className="icon"><i className="fa fa-compress" aria-hidden="true"></i></span>
                                 <span className="text">DISTANCE-</span>
                             </div>
-                            <div className="action-btn" onClick={this.changeDistance.bind(this, "plus")}>
+                            <div className={"action-btn " + (this.props.topologyOption.pin ? "disabled" : "")} onClick={this.changeDistance.bind(this, "plus")}>
                                 <span className="icon"><i className="fa fa-expand" aria-hidden="true"></i></span>
                                 <span className="text">DISTANCE+</span>
                             </div>

@@ -1,23 +1,12 @@
 import React, {Component} from "react";
 import "./Topology.css";
 import {connect} from "react-redux";
-import {withRouter} from 'react-router-dom';
-import logo from '../../img/scouter.png';
-import logoBlack from '../../img/scouter_black.png';
-import {
-    addRequest,
-    pushMessage,
-    setControlVisibility,
-    setTopologyOption
-} from "../../actions";
+import {withRouter} from "react-router-dom";
+import logo from "../../img/scouter.png";
+import logoBlack from "../../img/scouter_black.png";
+import {addRequest, pushMessage, setControlVisibility, setTopologyOption} from "../../actions";
 import jQuery from "jquery";
-import {
-    errorHandler,
-    getHttpProtocol,
-    getWithCredentials,
-    setAuthHeader,
-    getCurrentUser
-} from "../../common/common";
+import {errorHandler, getCurrentUser, getHttpProtocol, getWithCredentials, setAuthHeader} from "../../common/common";
 import * as d3 from "d3";
 import _ from "lodash";
 import numeral from "numeral";
@@ -28,10 +17,12 @@ class Topology extends Component {
     serverCnt = 0;
     doneServerCnt = 0;
 
-    nodes= [];
-    topology=[];
-    links =[];
+    nodes = [];
+    topology = [];
+    links = [];
     linked = {};
+    objTypeNameMap = new Map();
+    objCounterMap = new Map();
 
     preNodeCount = 0;
 
@@ -103,17 +94,17 @@ class Topology extends Component {
     };
 
     objCountersCpuInfo = {
-        IN_DANGER : {
-            state : 'IN-DANGER',
-            color : '#fc2527',
+        IN_DANGER: {
+            state: 'IN-DANGER',
+            color: '#fc2527',
         },
-        WARNING : {
-            state : 'WARNING',
-            color : '#ffd259'
+        WARNING: {
+            state: 'WARNING',
+            color: '#ffd259'
         },
-        DEFAULT : {
-            state : 'DEFAULT',
-            color : '#ffffff'
+        DEFAULT: {
+            state: 'DEFAULT',
+            color: '#ffffff'
         }
     };
 
@@ -137,21 +128,7 @@ class Topology extends Component {
         }
     }
 
-    componentDidUpdate(prevProps, prevState) {
-        /*if (this.topology && this.topology.length > 0) {
-            this.update();
-        }
-        */
-    }
-
-
     componentWillReceiveProps(nextProps) {
-        /*if (!this.polling) {
-            this.polling = setInterval(() => {
-                this.getTopology(nextProps.config, nextProps.filterMap, nextProps.user);
-            }, this.interval);
-        }
-        */
 
         if (JSON.stringify(this.props.config) !== JSON.stringify(nextProps.config)) {
             this.getAllInstanceInfo(nextProps.config);
@@ -178,6 +155,9 @@ class Topology extends Component {
         if (this.props.topologyOption.grouping !== nextProps.topologyOption.grouping) {
             this.getTopology(nextProps.config, nextProps.filterMap, nextProps.user, nextProps.topologyOption.grouping);
         }
+        if(this.props.topologyOption.arcLine !== nextProps.topologyOption.arcLine){
+            this.update(nextProps.topologyOption.pin, nextProps.topologyOption.tpsToLineSpeed, nextProps.topologyOption.speedLevel);
+        }
 
         if (this.props.topologyOption.tpsToLineSpeed !== nextProps.topologyOption.tpsToLineSpeed) {
             this.update(nextProps.topologyOption.pin, nextProps.topologyOption.tpsToLineSpeed, nextProps.topologyOption.speedLevel);
@@ -189,6 +169,7 @@ class Topology extends Component {
                 this.update(nextProps.topologyOption.pin, nextProps.topologyOption.tpsToLineSpeed, nextProps.topologyOption.speedLevel);
             }
         }
+
 
         if (this.props.topologyOption.pin !== nextProps.topologyOption.pin) {
             if (!nextProps.topologyOption.pin) {
@@ -202,12 +183,14 @@ class Topology extends Component {
                     d.fixed = true;
                     d.fx = d.x;
                     d.fy = d.y;
-                })
+                });
+
+                this.memorizeAll(this.node);
             }
         }
 
         if (this.props.topologyOption.redLine !== nextProps.topologyOption.redLine) {
-            this.edgeFlowPath.attr("class", function(d) {
+            this.edgeFlowPath.attr("class", function (d) {
                 if (nextProps.topologyOption.redLine) {
                     if (d.errorCount > 0) {
                         return 'edge-flow-path error';
@@ -275,7 +258,7 @@ class Topology extends Component {
                 servers: [],
                 objects: []
             });
-            errorHandler(xhr, textStatus, errorThrown, that.props, "getAllInstanceInfo", true);
+            errorHandler(xhr, textStatus, errorThrown, that.props, "getAllInstanceInfo", false);
         }).always(() => {
             this.setState({
                 loading: false
@@ -314,29 +297,86 @@ class Topology extends Component {
         });
     };
 
+    getObjectNameMerge = (category,name,grouping) => {
+        if( !grouping || !category ) {
+            return name;
+        }
+        let obj = this.objTypeNameMap.get(category);
+        if( obj ){
+            if( obj.filter(d => d === name).length === 0 ){
+                obj.push(name);
+            }
+            this.objTypeNameMap.set(category,obj)
+            return obj;
+        }else{
+            let _ret = [name];
+            this.objTypeNameMap.set(category,_ret)
+            return _ret;
+        }
 
-    getUnknownObjectType = (data, position) => {
+    };
+
+    setObjectCounter = (data,name,grouping) =>{
+
+        if( name && grouping ){
+            const d = {
+                tps :   data.count / data.period ,
+                errorRate : data.errorCount / data.count * 100,
+                avgElaps:   data.totalElapsed / data.count
+            };
+            let acc = this.objCounterMap.get(name)
+            if( acc ){
+                // let [_1,_2,_3,_4] = acc;
+                // this.objCounterMap.set(name, [
+                //     name,
+                //     (_2 +=d.tps),
+                //     (_3 +=d.errorRate),
+                //     (_4 +=d.avgElaps)
+                // ]);
+            }else {
+                //new
+                this.objCounterMap.set(name, [
+                    name,
+                    d.tps,
+                    d.errorRate,
+                    d.avgElaps
+                ]);
+            }
+
+        }
+    }
+    getUnknownObjectType = (data, position, grouping=false) => {
         let result = {};
         result["objType"] = null;
         result["objTypeName"] = null;
         result["category"] = null;
-
         switch (data.interactionType) {
             case "INTR_API_INCOMING" : {
-                result["objType"] = "API" + data[position + "ObjHash"];
-                result["objTypeName"] = "API";
+                //result["objType"] = "API" + data[position + "ObjHash"];
+                result["objType"] = "API-INCOMING-UNKNOWN";
+                result["objTypeName"] = "API-INCOMING-UNKNOWN";
+
+                if (position === "from") {
+                    result["category"] = "API-INCOMING-UNKNOWN";
+                }
                 break;
             }
 
             case "INTR_API_OUTGOING" : {
-                result["objType"] = "API" + data[position + "ObjHash"];
-                result["objTypeName"] = "API";
+                //result["objType"] = "API" + data[position + "ObjHash"];
+                result["objType"] = "API-UNKNOWN";
+                result["objTypeName"] = "API-UNKNOWN";
+
+                if (position === "to") {
+                    result["category"] = "API-UNKNOWN";
+                }
                 break;
             }
 
             case "INTR_NORMAL_INCOMING" : {
-                result["objType"] = "NORMAL" + data[position + "ObjHash"];
+                result["objType"] = ["IN",this.instances[data.toObjHash].objType,"CLIENT"].join("-");
                 result["objTypeName"] = "";
+
                 if (position === "from") {
                     result["category"] = "CLIENT";
                 }
@@ -344,22 +384,25 @@ class Topology extends Component {
             }
 
             case "INTR_NORMAL_OUTGOING" : {
-                result["objType"] = "NORMAL" + data[position + "ObjHash"];
-                result["objTypeName"] = data[position + "ObjName"];
+                result["objType"] = ["OUT",this.instances[data.fromObjHash].objType,"NORMAL"].join("-");
+                result["objTypeName"] = this.getObjectNameMerge(result["objType"],data[position + "ObjName"],grouping);
+
                 if (position === "from") {
 
                 } else {
+                    this.setObjectCounter(data,[result["objType"],data[position + "ObjName"]].join('-'),grouping);
                     result["category"] = "EXTERNAL";
                 }
                 break;
             }
             case "INTR_REDIS_CALL" : {
-                result["objType"] = "REDIS" + data[position + "ObjHash"];
+                result["objType"] = ["OUT",this.instances[data.fromObjHash].objType,"REDIS"].join("-");
                 const redisName = data[position + "ObjName"] || "-";
-                result["objTypeName"] = redisName.length > 1 ? redisName : "REDIS";
+                result["objTypeName"] =  this.getObjectNameMerge(result["objType"],redisName.length > 1 ? redisName : "REDIS",grouping);
                 if (position === "from") {
 
                 } else {
+                    this.setObjectCounter(data,[ result["objType"],redisName.length > 1 ? redisName : "REDIS" ].join('-'),grouping);
                     result["category"] = "REDIS";
                 }
                 break;
@@ -367,31 +410,34 @@ class Topology extends Component {
             case "INTR_KAFKA_CALL" : {
                 result["objType"] = "KAFKA" + data[position + "ObjHash"];
                 const kafkaName = data[position + "ObjName"] || "-";
-                result["objTypeName"] = kafkaName.length > 1 ? kafkaName : "KFAKA";
+                result["objTypeName"] =  this.getObjectNameMerge(result["objType"],kafkaName.length > 1 ? kafkaName : "KFAKA",grouping);
                 if (position === "from") {
 
                 } else {
+                    this.setObjectCounter(data,[ result["objType"],kafkaName.length > 1 ? kafkaName : "KFAKA" ].join('-'),grouping);
                     result["category"] = "KAFKA";
                 }
                 break;
             }
             case "INTR_RABBITMQ_CALL" : {
-                result["objType"] = "RABBITMQ" + data[position + "ObjHash"];
+                result["objType"] = ["OUT",this.instances[data.fromObjHash].objType,"RABBITMQ"].join("-");
                 const rabbitName = data[position + "ObjName"] || "-";
-                result["objTypeName"] = rabbitName.length > 1 ? rabbitName : "RABBITMQ";
+                result["objTypeName"] =  this.getObjectNameMerge(result["objType"],rabbitName.length > 1 ? rabbitName : "RABBITMQ",grouping);
                 if (position === "from") {
 
                 } else {
+                    this.setObjectCounter(data,[ result["objType"],rabbitName.length > 1 ? rabbitName : "RABBITMQ" ].join('-'),grouping);
                     result["category"] = "RABBITMQ";
                 }
                 break;
             }
             case "INTR_DB_CALL" : {
-                result["objType"] = "DB" + data[position + "ObjHash"];
-                result["objTypeName"] = data[position + "ObjName"];
+                result["objType"] = ["OUT",this.instances[data.fromObjHash].objType,"DB"].join("-");
+                result["objTypeName"] = this.getObjectNameMerge(result["objType"],data[position + "ObjName"],grouping);
                 if (position === "from") {
 
                 } else {
+                    this.setObjectCounter(data,[ result["objType"],data[position + "ObjName"]].join('-'),grouping);
                     result["category"] = "DB";
                 }
                 break;
@@ -408,9 +454,9 @@ class Topology extends Component {
     getTopology = (config, filterMap, user, grouping) => {
 
         let that = this;
-
         let objects = Object.keys(filterMap);
-
+        this.objTypeNameMap.clear();
+        this.objCounterMap.clear();
         if (objects && objects.length > 0) {
             this.props.addRequest();
             jQuery.ajax({
@@ -424,26 +470,27 @@ class Topology extends Component {
                     setAuthHeader(xhr, config, getCurrentUser(config, user));
                 }
             }).done((msg) => {
-
                 let list = msg.result;
                 if (list) {
                     let objectTypeTopologyMap = {};
                     let objToTypeMap = {};
-
                     if (grouping) {
                         list.forEach((d) => {
+
                             if (that.instances[Number(d.fromObjHash)] && that.instances[Number(d.fromObjHash)].objType) {
                                 d.fromObjType = that.instances[d.fromObjHash].objType;
                                 d.fromObjTypeName = that.instances[d.fromObjHash].objType;
                                 d.fromObjTypeFamily = that.instances[d.fromObjHash].objFamily;
                                 d.fromObjCategory = that.instances[d.fromObjHash].objFamily;
+                                this.setObjectCounter(d,that.instances[Number(d.fromObjHash)].objName,grouping);
                             } else {
-                                let typeInfo = that.getUnknownObjectType(d, "from");
+                                let typeInfo = that.getUnknownObjectType(d, "from",true);
                                 d.fromObjType = typeInfo["objType"];
                                 d.fromObjTypeName = typeInfo["objTypeName"];
                                 d.fromObjTypeFamily = null;
                                 d.fromObjCategory = typeInfo["category"];
                             }
+
                             d.fromObjCountersCpu = _.find(d.fromObjCounters, {name: 'Cpu'});
 
                             if (that.instances[Number(d.toObjHash)] && that.instances[Number(d.toObjHash)].objType) {
@@ -451,8 +498,9 @@ class Topology extends Component {
                                 d.toObjTypeName = that.instances[d.toObjHash].objType;
                                 d.toObjTypeFamily = that.instances[d.toObjHash].objFamily;
                                 d.toObjCategory = that.instances[d.toObjHash].objFamily;
+                                // this.setObjectCounter(d,that.instances[Number(d.toObjHash)].objName,grouping);
                             } else {
-                                let typeInfo = that.getUnknownObjectType(d, "to");
+                                let typeInfo = that.getUnknownObjectType(d, "to",true);
                                 d.toObjType = typeInfo["objType"];
                                 d.toObjTypeName = typeInfo["objTypeName"];
                                 d.toObjTypeFamily = null;
@@ -461,16 +509,20 @@ class Topology extends Component {
                             d.toObjCountersCpu = _.find(d.toObjCounters, {name: 'Cpu'});
 
                             if (!objToTypeMap[d.fromObjHash]) objToTypeMap[d.fromObjHash] = {};
-                            if (!objToTypeMap[d.toObjHash]) objToTypeMap[d.fromObjHash] = {};
+                            if (!objToTypeMap[d.toObjHash]) objToTypeMap[d.toObjHash] = {};
                             objToTypeMap[d.fromObjHash] = d.fromObjType;
                             objToTypeMap[d.toObjHash] = d.toObjType;
 
-                            if (objectTypeTopologyMap[d.fromObjType + "_" + d.toObjType]) {
-                                objectTypeTopologyMap[d.fromObjType + "_" + d.toObjType].count += Number(d.count);
-                                objectTypeTopologyMap[d.fromObjType + "_" + d.toObjType].errorCount += Number(d.errorCount);
-                                objectTypeTopologyMap[d.fromObjType + "_" + d.toObjType].totalElapsed += Number(d.totalElapsed);
+
+
+                            // console.log(dd.fromObjType,d.toObjType);
+                            const topology_key = [d.fromObjType,"_",d.toObjType].join(""); //- from + to object type 별로 그룹핑 함
+                            if (objectTypeTopologyMap[topology_key]) {
+                                objectTypeTopologyMap[topology_key].count += Number(d.count);
+                                objectTypeTopologyMap[topology_key].errorCount += Number(d.errorCount);
+                                objectTypeTopologyMap[topology_key].totalElapsed += Number(d.totalElapsed);
                             } else {
-                                objectTypeTopologyMap[d.fromObjType + "_" + d.toObjType] = {
+                                objectTypeTopologyMap[topology_key] = {
                                     fromObjHash: d.fromObjType,
                                     fromObjName: d.fromObjTypeName,
                                     fromObjTypeFamily: d.fromObjTypeFamily,
@@ -480,11 +532,11 @@ class Topology extends Component {
                                     toObjName: d.toObjTypeName,
                                     toObjTypeFamily: d.toObjTypeFamily,
                                     toObjCategory: d.toObjCategory,
-                                    toObjCountersCpu : d.toObjCountersCpu,
+                                    toObjCountersCpu: d.toObjCountersCpu,
                                     count: Number(d.count),
                                     errorCount: Number(d.errorCount),
                                     period: Number(d.period),
-                                    totalElapsed: Number(d.totalElapsed)
+                                    totalElapsed: Number(d.totalElapsed),
                                 };
                             }
                         });
@@ -511,7 +563,7 @@ class Topology extends Component {
                                 d.toObjCategory = typeInfo["category"];
                             }
                             d.toObjCountersCpu = _.find(d.toObjCounters, {name: 'Cpu'});
-
+                            //- object hash 별로 개별 (from + to)
                             objectTypeTopologyMap[d.fromObjHash + "_" + d.toObjHash] = {
                                 group: false,
                                 fromObjHash: d.fromObjHash,
@@ -523,7 +575,7 @@ class Topology extends Component {
                                 toObjName: d.toObjName,
                                 toObjTypeFamily: d.toObjTypeFamily,
                                 toObjCategory: d.toObjCategory,
-                                toObjCountersCpu : d.toObjCountersCpu,
+                                toObjCountersCpu: d.toObjCountersCpu,
                                 count: Number(d.count),
                                 errorCount: Number(d.errorCount),
                                 period: Number(d.period),
@@ -534,6 +586,7 @@ class Topology extends Component {
 
                     let topology = [];
                     let outCount = 0;
+                    // unknown link connect;
                     for (let attr in objectTypeTopologyMap) {
                         let obj = objectTypeTopologyMap[attr];
                         if (obj.fromObjHash === "0" || obj.fromObjHash === "") {
@@ -560,7 +613,6 @@ class Topology extends Component {
                             totalElapsed: obj.totalElapsed
                         });
                     });
-
                     // from, to 정보에서 유일한 노드 정보 추출
                     let nodes = _.uniqBy(_.map(topology, (d) => {
                         return {
@@ -576,19 +628,25 @@ class Topology extends Component {
                             objName: d.toObjName,
                             objCategory: d.toObjCategory ? d.toObjCategory : "",
                             objTypeFamily: d.toObjTypeFamily ? d.toObjTypeFamily : "",
-                            objCountersCpu : d.toObjCountersCpu ? d.toObjCountersCpu.value : ""
+                            objCountersCpu: d.toObjCountersCpu ? d.toObjCountersCpu.value : ""
                         }
                     })), (d) => {
                         return d.id;
                     });
-
+                    //- node count calc
                     nodes.forEach((node) => {
                         node.grouping = grouping;
-                        node.instanceCount = Object.values(objToTypeMap).filter((d) => d === node.objName).length;
+                        const nodeInstance = Object.values(objToTypeMap).filter((d) => d === node.objName);
+                        if( grouping ) {
+                            Object.values(this.instances).filter(d => node.id === d.objType).forEach(d => {
+                                this.getObjectNameMerge(node.id, d.objName, grouping);
+                            });
+                        }
+                        node.instanceCount = nodeInstance.length;
                     });
 
                     let linked = {};
-
+                    //- linking 된 노드 체킹
                     links.forEach((d) => {
                         linked[`${d.source},${d.target}`] = true;
                     });
@@ -599,16 +657,16 @@ class Topology extends Component {
                     this.linked = linked;
 
                     /*this.setState({
-                        list: msg.result
-                    });*/
+                     list: msg.result
+                     });*/
 
                     this.setState({
                         lastUpdateTime: (new Date()).getTime()
                     });
 
                     this.props.setTopologyOption({
-                        nodeCount : this.nodes.length,
-                        linkCount : this.links.length
+                        nodeCount: this.nodes.length,
+                        linkCount: this.links.length
                     });
 
                     this.update(this.props.topologyOption.pin, this.props.topologyOption.tpsToLineSpeed, this.props.topologyOption.speedLevel);
@@ -618,20 +676,19 @@ class Topology extends Component {
                 errorHandler(xhr, textStatus, errorThrown, this.props, "getTopology", true);
             });
         } else {
-            this.nodes= [];
-            this.topology=[];
-            this.links =[];
+            this.nodes = [];
+            this.topology = [];
+            this.links = [];
             this.linked = {};
 
             this.props.setTopologyOption({
-                nodeCount : 0,
-                linkCount : 0
+                nodeCount: 0,
+                linkCount: 0
             });
 
             this.update(this.props.topologyOption.pin);
         }
     };
-
 
 
     mergeLink = (currentLinks, newLinks) => {
@@ -647,8 +704,8 @@ class Topology extends Component {
             }
 
             linkMap[id] = {
-                update : false,
-                link : link
+                update: false,
+                link: link
             };
         });
 
@@ -663,8 +720,8 @@ class Topology extends Component {
                 linkMap[id].link.totalElapsed = link.totalElapsed;
             } else {
                 linkMap[id] = {
-                    update : true,
-                    link : link
+                    update: true,
+                    link: link
                 };
             }
         });
@@ -689,8 +746,8 @@ class Topology extends Component {
 
         currentNodes.forEach((node) => {
             nodeMap[node.id] = {
-                update : false,
-                node : node
+                update: false,
+                node: node
             };
         });
 
@@ -704,8 +761,8 @@ class Topology extends Component {
                 nodeMap[node.id].node.instanceCount = node.instanceCount;
             } else {
                 nodeMap[node.id] = {
-                    update : true,
-                    node : node
+                    update: true,
+                    node: node
                 };
             }
         });
@@ -730,7 +787,7 @@ class Topology extends Component {
         return this.linked[`${a},${b}`] || this.linked[`${b},${a}`];
     };
 
-    dragstarted = (d) => {
+    dragStarted = (d) => {
         if (!d3.event.active) this.simulation.alphaTarget(0.3).restart();
         d3.event.sourceEvent.stopPropagation();
         d.fx = d.x;
@@ -742,17 +799,20 @@ class Topology extends Component {
         d.fy = d3.event.y;
     };
 
-    dragended = (d) => {
+    dragEnd = (d) => {
         if (!d3.event.active) this.simulation.alphaTarget(0);
         if (!d.fixed) {
             if (!this.props.topologyOption.pin) {
                 d.fx = null;
                 d.fy = null;
             }
+        } else {
+            //this.memorizeNode(d); // 성능은 1개씩 저장하는 것이 맞지만, 구 버전 클라이언트에서 이미 PIN되어 있는데 저장 정보가 없다면, PIN 토글 전까지 노드 한개 정보만 변경되고, 나머지는 떠다니게 되므로, 하위 호환성 측면에서 전체를 저장
+            this.memorizeAll(this.node);
         }
     };
 
-    getCatgegoryInfo = (category) => {
+    getCategoryInfo = (category) => {
         if (category && this.objCategoryInfo[category]) {
             return this.objCategoryInfo[category];
         } else {
@@ -763,8 +823,8 @@ class Topology extends Component {
     getCountersCpuInfo = (cpu) => {
         cpu = Number(cpu);
 
-        if(cpu >= 90) return this.objCountersCpuInfo['IN_DANGER'];
-        else if(cpu >= 70) return this.objCountersCpuInfo['WARNING'];
+        if (cpu >= 90) return this.objCountersCpuInfo['IN_DANGER'];
+        else if (cpu >= 70) return this.objCountersCpuInfo['WARNING'];
 
         return this.objCountersCpuInfo['DEFAULT'];
     };
@@ -781,7 +841,7 @@ class Topology extends Component {
         let dry = dr;
         let xRotation = 0;
         let largeArc = 0;
-        if(d.sweep === undefined) {
+        if (d.sweep === undefined) {
             d.sweep = true;
         }
         let sweep = d.sweep ? 1 : 0;
@@ -794,14 +854,21 @@ class Topology extends Component {
             y2 = y2 + 1;
         }
 
-        return "M" + x1 + "," + y1 + "A" + drx + "," + dry + " " + xRotation + "," + largeArc + "," + sweep + " " + x2 + "," + y2;
+
+
+        // self or grouping 이 아닌경우 엣지 생성
+        if( !this.props.topologyOption.grouping || this.props.topologyOption.arcLine || d.source === d.target) {
+            return ["M", x1, ",", y1, "A", drx, ",", dry, " ", xRotation, ",", largeArc, ",", sweep, " ", x2, ",", y2].join("");
+        } else {
+            return ["M", x1, ",", y1, "A", 0, ",", 0, " ", xRotation, ",", largeArc, ",", sweep, " ", x2, ",", y2].join("");
+        }
     };
 
     zoomed = () => {
         this.svg.attr("transform", d3.event.transform);
     };
 
-    nodeTypeHover = (d, o)=> {
+    nodeTypeHover = (d, o) => {
         if (o.id === d.id) {
             return 1.0;
         }
@@ -813,15 +880,72 @@ class Topology extends Component {
         return 0.4;
     };
 
-    linkTypeHover = (d, o)=> {
+    linkTypeHover = (d, o) => {
         if (d.id === o.source.id || d.id === o.target.id) {
             return 1;
         } else {
             return 0.5;
         }
     };
+    _trimPrefix =(prefix,name) =>{
+        return _.replace(name,prefix+"-","");
+    };
+    _showTooltip = (d, isShow=false) =>{
 
-    hover = (d) => {
+        if (this.props.topologyOption.highlight && this.props.topologyOption.grouping && (  d.objCategory && d.objCategory !== "CLIENT" ) ) {
+            const isLocationMove = this.props.control.Controller === "max" && this.props.control.pin;
+            const toolTipOffsetX=  isLocationMove ? -380 : -20;
+            const toolTipOffsetY=  -70;
+
+            let dpObjName = [];
+
+            if( d.objTypeFamily === "javaee" ){
+                dpObjName = this.objTypeNameMap.get(d.objName);
+            }else{
+                dpObjName = this.objTypeNameMap.get(d.id);
+            }
+            this.tooltip.transition(500).style("opacity", 1);
+            this.tooltip.html(
+                //- tooltip value 값을 응답 시간을 최대 시간 기준으로 최대 10개로 제한 한다.
+                _(( Array.isArray(dpObjName) ? dpObjName : [dpObjName] ).map(dp=> {
+                    let counter  = [dp,0,0,0];
+                    if( d.objTypeFamily === "javaee" ){
+                        counter = this.objCounterMap.get(dp);
+                    }else{
+                        counter = this.objCounterMap.get([d.id,dp].join('-'));
+                    }
+                    return counter;
+                }).filter(v => v ? true : false ).sort((a,b)=> b[3]-a[3] ))
+                    .take(10)
+                    .values()
+                    .map( cnt  => {
+
+                            const [name, tps, errorRate, avgElasp] = cnt;
+                            return `<div class="tooltip-group">
+                                         <p>${this._trimPrefix(d.id,name)}</p>
+                                    <div class="tooltip-counter">
+                                         <tspan>${numeral(tps).format(this.props.config.numberFormat)} r/s</tspan>
+                                         <tspan style="color:red">${numeral(errorRate).format(this.props.config.numberFormat)}%</tspan>
+                                         <tspan>${numeral(avgElasp).format(this.props.config.numberFormat)}ms</tspan>
+                                     </div>
+                            </div>`;
+
+
+                    })
+                .join(' ')
+            )
+            .style("left",[d3.event.pageX + toolTipOffsetX,"px"].join(''))
+            .style("top",[d3.event.pageY + toolTipOffsetY,"px"].join(''));
+        }
+
+        if(!isShow){
+            if (this.props.topologyOption.grouping) {
+                this.tooltip.transition(500).style("opacity", 0);
+            }
+        }
+    };
+
+    hover = (d,isIcon=false) => {
 
         if (this.props.topologyOption.highlight) {
             this.node.transition(500).style('opacity', o => {
@@ -847,11 +971,14 @@ class Topology extends Component {
             this.edgeFlowPath.transition(500).style('stroke-opacity', o => {
                 return this.linkTypeHover(d, o);
             });
+
+
         }
+
 
     };
 
-    leave = () => {
+    leave = (d) => {
         if (this.props.topologyOption.highlight) {
             this.node.transition(500).style('opacity', 1.0);
             this.nodeNameText.transition(500).style('opacity', 1.0);
@@ -859,7 +986,9 @@ class Topology extends Component {
             this.nodeLabel.transition(500).style('opacity', 1.0);
             this.edgeTextList.transition(500).style('opacity', 1);
             this.edgeFlowPath.transition(500).style('stroke-opacity', 0.5);
+
         }
+
     };
 
     getStepCountByTps = (tps, tpsMode) => {
@@ -897,22 +1026,72 @@ class Topology extends Component {
                 return edge.prevStyle;
             }
         } else {
-            return "flow 1s infinite steps(20)";
+            return "flow 0s infinite steps(20)";
         }
     };
 
-    memorize = (d)=> {
-        localStorage.setItem(d.id+"-x", d.x);
-        localStorage.setItem(d.id+"-y", d.y);
+    memorizeAll = (nodes) => {
+        let storageTopologyPosition = localStorage.getItem("topologyPosition");
+        let topologyPosition = {};
+
+        if (storageTopologyPosition) {
+            topologyPosition = JSON.parse(storageTopologyPosition);
+        }
+
+        nodes.each((d) => {
+            topologyPosition[d.id] = {
+                x: d.x,
+                y: d.y
+            }
+        });
+
+        localStorage.setItem("topologyPosition", JSON.stringify(topologyPosition));
     };
 
-    getX = (d)=> {
-        return Number(localStorage.getItem(d.id+"-x"));
+    memorizeNode = (node) => {
+        let storageTopologyPosition = localStorage.getItem("topologyPosition");
+        let topologyPosition = {};
+
+        if (storageTopologyPosition) {
+            topologyPosition = JSON.parse(storageTopologyPosition);
+        }
+
+        topologyPosition[node.id] = {
+            x: node.x,
+            y: node.y
+        };
+
+        localStorage.setItem("topologyPosition", JSON.stringify(topologyPosition));
+
     };
 
-    getY = (d)=> {
-        return Number(localStorage.getItem(d.id+"-y"));
+    getNodePosition = () => {
+        let storageTopologyPosition = localStorage.getItem("topologyPosition");
+        let topologyPosition = {};
+
+        if (storageTopologyPosition) {
+            topologyPosition = JSON.parse(storageTopologyPosition);
+        }
+
+        return topologyPosition;
     };
+
+    getX = (d) => {
+        return Number(localStorage.getItem(d.id + "-x"));
+    };
+
+    getY = (d) => {
+        return Number(localStorage.getItem(d.id + "-y"));
+    };
+
+    linkKey=(d) =>{
+        if (typeof(d.source) === "object") {
+            return d.source.id + "-" + d.target.id;
+        } else {
+            return d.source + "-" + d.target;
+        }
+    };
+
     update = (pin, tpsToLineSpeed, speedLevel) => {
         let that = this;
 
@@ -924,7 +1103,27 @@ class Topology extends Component {
         let links = this.links;
 
         if (!this.svg) {
-            this.svg = d3.select(this.refs.topologyChart).append("svg").attr("width", this.width).attr("height", this.height).append("g");;
+            this.svg = d3.select(this.refs.topologyChart).append("svg").attr("width", this.width).attr("height", this.height).append("g");
+            //- allow adding
+            this.svg
+                .append("defs")
+                .append("marker")
+                .attr("class", "arrowhead")
+                .attr("id", "arrowhead")
+                .attr("viewBox", "-0 -5 10 10")
+                .attr("refX", "20")
+                .attr("refY", "0")
+                .attr("orient", "auto")
+                .attr("markerWidth", "3")
+                .attr("markerHeight", "3")
+                .attr("xoverflow", "visible")
+                .attr("opacity", .7)
+                .append("path")
+                .attr("d", "M 0,-5 L 10, 0 L 0, 5")
+                .style("fill", 'white');
+
+
+
 
             this.edgePathGroup = this.svg.append("g").attr("class", "edge-path-group");
             this.edgeTextGroup = this.svg.append("g").attr("class", "edge-text-group");
@@ -951,6 +1150,12 @@ class Topology extends Component {
             this.simulation.force("collide", d3.forceCollide(30));
             this.simulation.nodes(nodes).on("tick", this.ticked);
             this.simulation.force("link").links(links).distance([this.props.topologyOption.distance]);
+
+            this.tooltip = d3.select(".topology-chart")
+                .append("div")
+                .attr("class", "tooltip")
+                .style("z-index",999)
+                .style("opacity", 0);
         }
 
         // 노드에 표시되는 텍스트
@@ -1010,22 +1215,65 @@ class Topology extends Component {
             }
         }).attr('id', function (d, i) {
             return 'edgeFlowPath' + i
-        }).style("pointer-events", "none").style("animation", function (d) {
+        })
+        .style("pointer-events", "none")
+        .style("animation", function (d) {
             return that.styleAnimateEdge(d, this, tpsToLineSpeed, speedLevel);
         });
 
         this.edgeFlowPath.style("pointer-events", "auto");
+        //- arc
+        if( this.props.topologyOption.grouping ) {
+
+            this.edgeFlowPath.attr("marker-end", (d, i) => {
+                if(this.props.topologyOption.arcLine) {
+                    return "url(#arrowhead-unknown)";
+                }
+                if (typeof(d.source) === "object") {
+                    if (d.source.id === d.target.id) {
+                        return `url(#arrowhead-${d.source.id})`;
+                    }
+                } else {
+                    if (d.source === d.target) {
+                        return `url(#arrowhead-${d.source})`;
+                    }
+                }
+                return "url(#arrowhead)";
+
+            });
+        }
+
         this.edgeFlowPath.on("click", that.edgeClicked);
 
+
+
         // 노드 아래에 표시되는 명칭
-        this.nodeNameText = this.nodeNameTextGroup.selectAll(".node-name").data(nodes);
+        this.nodeNameText = this.nodeNameTextGroup.selectAll(".node-name").data(nodes)
         this.nodeNameText.exit().remove();
-        this.nodeNameText = this.nodeNameText.enter().append("text").merge(this.nodeNameText).attr("class", "node-name")
+
+        this.nodeNameText = this.nodeNameText.enter()
+            .append("text")
+            .merge(this.nodeNameText)
+            .attr("class", "node-name")
             .style("font-size", (this.option.fontSize + 1) + "px")
             .style("font-weight", (d) => d.objTypeFamily === "javaee" ? "bold" : "normal")
             .style("fill", (d) => d.objTypeFamily === "javaee" ? "#ffd600" : "white")
-            .text((d) => d.objName);
+            .text(d =>{
+                if( !this.props.topologyOption.grouping ) {
+                    return d.objName;
+                }
+                if( d.objCategory === "CLIENT"){
+                    return;
+                }
+                if( d.objTypeFamily !== "javaee" ){
+                    if( Array.isArray(d.objName) ){
+                        return [d.objName.length, "target(s)"].join(" ");
+                    }
+                }else{
+                    return d.objName;
+                }
 
+            });
         // 노드의 인스턴수 수
         this.nodeInstanceCountText = this.nodeInstanceCountTextGroup.selectAll(".node-inst-count").data(nodes);
         this.nodeInstanceCountText.exit().remove();
@@ -1040,12 +1288,13 @@ class Topology extends Component {
         this.node = this.node.enter().append("circle").merge(this.node).attr("r", this.r).style("stroke-width", "4px")
             .attr('class', (d) => 'node cpu-' + that.getCountersCpuInfo(d.objCountersCpu).state)
             .style("fill", (d) => that.getCountersCpuInfo(d.objCountersCpu).color)
-            .style("stroke", (d) => that.getCatgegoryInfo(d.objCategory).color);
+            .style("stroke", (d) => that.getCategoryInfo(d.objCategory).color);
 
-        this.node.call(d3.drag().on("start", this.dragstarted).on("drag", this.dragged).on("end", this.dragended));
-        this.node.on("mouseover",that.hover);
-        this.node.on("mouseout", that.leave);
+        this.node.call(d3.drag().on("start", this.dragStarted).on("drag", this.dragged).on("end", this.dragEnd));
+        // this.node.on("mouseover", (d) => that.hover(d));
+        // this.node.on("mouseout", (d) => that.leave(d));
 
+        //- node 부분과, node Icon 부분의 이벤트 경합으로 인한 부하 발생, 노드 ICON으로 이벤트 기반으로 단일화
         // 노드 라벨
         this.nodeLabel = this.nodeLabelGroup.selectAll(".node-label").data(nodes);
         this.nodeLabel.exit().remove();
@@ -1053,7 +1302,7 @@ class Topology extends Component {
         this.nodeLabel.text(function (d) {
             return (d.objTypeFamily ? d.objTypeFamily : d.objCategory).toUpperCase();
         }).style("fill", function (d) {
-            return that.getCatgegoryInfo(d.objCategory).color;
+            return that.getCategoryInfo(d.objCategory).color;
         });
 
         // 노드 아이콘
@@ -1061,16 +1310,24 @@ class Topology extends Component {
         this.nodeIcon.exit().remove();
         this.nodeIcon = this.nodeIcon.enter().append("text").merge(this.nodeIcon);
         this.nodeIcon.attr("class", "node-icon").style("font-family", function (d) {
-            return that.getCatgegoryInfo(d.objCategory).fontFamily;
+            return that.getCategoryInfo(d.objCategory).fontFamily;
         }).style("font-size", function (d) {
-            return that.getCatgegoryInfo(d.objCategory).fontSize;
+            return that.getCategoryInfo(d.objCategory).fontSize;
         }).style("fill", function (d) {
-            return that.getCatgegoryInfo(d.objCategory).color;
+            return that.getCategoryInfo(d.objCategory).color;
         }).text(function (d) {
-            return that.getCatgegoryInfo(d.objCategory).text;
-        }).call(d3.drag().on("start", this.dragstarted).on("drag", this.dragged).on("end", this.dragended));
-        this.nodeIcon.on("mouseover",that.hover);
-        this.nodeIcon.on("mouseout", that.leave);
+            return that.getCategoryInfo(d.objCategory).text;
+        }).call(d3.drag().on("start", this.dragStarted).on("drag", this.dragged).on("end", this.dragEnd));
+        this.nodeIcon.on("mouseover", (d) => this.hover(d));
+        this.nodeIcon.on("mouseout", (d) => this.leave(d));
+        this.nodeIcon.on("mouseover.tooltip", (d) =>{
+            this._showTooltip(d,true);
+        });
+        this.nodeIcon.on("mouseleave.tooltip", (d) =>{
+            this._showTooltip(d,false);
+        });
+
+
 
         this.simulation.nodes(nodes).on("tick", this.ticked);
         this.simulation.force("link").links(links);
@@ -1086,17 +1343,21 @@ class Topology extends Component {
         }
 
         if (pin) {
+            let topologyPosition = this.getNodePosition();
             this.node.each((d) => {
-                d.fixed = true;
-                d.fx = this.getX(d);
-                d.fy = this.getY(d);
-            });
-        } else {
-            this.node.each((d) => {
-                d.x = this.getX(d);
-                d.y = this.getY(d);
-            })
 
+                let pos = topologyPosition[d.id];
+                if (pos) {
+                    d.fixed = true;
+                    d.fx = topologyPosition[d.id].x;
+                    d.fy = topologyPosition[d.id].y;
+                } else {
+                    d.fixed = true;
+                    d.fx = null;
+                    d.fy = null;
+                }
+
+            });
         }
         this.preNodeCount = nodes.length;
     };
@@ -1109,10 +1370,10 @@ class Topology extends Component {
     };
 
     calcEdgeTextDy = (d) => {
-        if(d.sweep === undefined) {
+        if (d.sweep === undefined) {
             d.sweep = true;
         }
-        if(!d.sweep) {
+        if (!d.sweep) {
             return 15;
         } else {
             return -10;
@@ -1120,18 +1381,17 @@ class Topology extends Component {
     };
 
     ticked = () => {
-
         let that = this;
         // 노드 위치
         this.node.attr("cx", function (d) {
-            that.memorize(d);
             return d.x;
 
         }).attr("cy", function (d) {
             return d.y;
         });
 
-        // 노드 명 아래 가운데 위치 하도록
+
+        // // 노드 명 아래 가운데 위치 하도록
         this.nodeNameText.attr("x", function (d) {
             const width = this.getComputedTextLength();
             return d.x - (width / 2);
@@ -1190,6 +1450,7 @@ class Topology extends Component {
 
 let mapStateToProps = (state) => {
     return {
+        control: state.control,
         objects: state.target.objects,
         selection: state.target.selection,
         config: state.config,
@@ -1197,7 +1458,7 @@ let mapStateToProps = (state) => {
         template: state.template,
         range: state.range,
         counterInfo: state.counterInfo,
-        supported : state.supported,
+        supported: state.supported,
         filterMap: state.target.filterMap,
         topologyOption: state.topologyOption
     };

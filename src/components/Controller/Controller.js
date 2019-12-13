@@ -1,7 +1,22 @@
 import React, {Component} from "react";
 import "./Controller.css";
 
-import {addFilteredObject, addRequest, clearAllMessage, pushMessage, removeFilteredObject, setBoxes, setBoxesLayouts, setConfig, setControllerState, setControlVisibility, setFilterMap, setLayouts, setTarget} from "../../actions";
+import {
+    addFilteredObject,
+    addRequest,
+    clearAllMessage,
+    pushMessage,
+    removeFilteredObject,
+    setBoxes,
+    setBoxesLayouts,
+    setConfig,
+    setControllerState,
+    setControlVisibility,
+    setFilterMap,
+    setLayouts,
+    setPresetName,
+    setTarget
+} from "../../actions";
 import {connect} from "react-redux";
 import {withRouter} from "react-router-dom";
 import Logo from "../Logo/Logo";
@@ -15,9 +30,22 @@ import * as PaperIcons from "../../common/PaperIcons";
 import LayoutManager from "../Menu/LayoutManager/LayoutManager";
 import PresetManager from "../Menu/PresetManager/PresetManager";
 import * as _ from "lodash";
-import {buildHttpProtocol, errorHandler, getCurrentUser, getDefaultServerConfig, getDefaultServerConfigIndex, getHttpProtocol, getWithCredentials, setAuthHeader, setData, setRangePropsToUrl, setServerTimeGap} from "../../common/common";
+import {
+    buildHttpProtocol,
+    errorHandler,
+    getCurrentUser,
+    getDefaultServerConfig,
+    getDefaultServerConfigIndex,
+    getHttpProtocol,
+    getWithCredentials,
+    setAuthHeader,
+    setData,
+    setRangePropsToUrl,
+    setServerTimeGap
+} from "../../common/common";
 import jQuery from "jquery";
 import PaperControl from "../Paper/PaperControl/PaperControl";
+import * as common from "../../common/common";
 
 
 class Controller extends Component {
@@ -42,12 +70,13 @@ class Controller extends Component {
         if (getDefaultServerConfig(this.props.config).authentification !== "bearer") {
             this.setTargetFromUrl(this.props);
         } else {
-            let defaultServerconfig = getDefaultServerConfig(this.props.config);
-            let origin = defaultServerconfig.protocol + "://" + defaultServerconfig.address + ":" + defaultServerconfig.port;
+            let defaultServerConfig = getDefaultServerConfig(this.props.config);
+            let origin = defaultServerConfig.protocol + "://" + defaultServerConfig.address + ":" + defaultServerConfig.port;
             if (this.props.config || (this.props.user[origin] && this.props.user[origin].id)) {
                 this.setTargetFromUrl(this.props);
             }
         }
+        common.setTargetServerToUrl(this.props, this.props.config);
 
         if (localStorage.getItem("selectedObjects")) {
             let selectedObjects = JSON.parse(localStorage.getItem("selectedObjects"));
@@ -162,40 +191,61 @@ class Controller extends Component {
             selector: !this.state.preset ? false : this.state.preset
         });
     };
+
     getConfigServerName = (props) => {
-        const serverAddress = buildHttpProtocol(props.config);
-        const mapper = [];
-        if (serverAddress) {
-            const _promise = serverAddress.map(_get => {
-                    mapper.push({
-                        idx: _get.key,
-                        addr: _get.addr
-                    });
-                    return jQuery.ajax({
-                        method: "GET",
-                        url: `${_get.addr}/scouter/v1/info/server`,
-                        xhrFields: _get.authentification === "cookie",
-                        beforeSend: function (xhr) {
-                            const _tokenInfo = props.user[_get.addr];
-                            if (_get.authentication === "bearer" && _tokenInfo) {
-                                xhr.setRequestHeader('Authorization', ['bearer ', _tokenInfo.token].join(''));
-                            }
+        let allServerList = buildHttpProtocol(props.config);
+        let allCount = allServerList.length;
+        let doneCount = 0;
+        let serverNameMap = {};
+
+        if (allServerList) {
+            allServerList.forEach((server) => {
+                jQuery.ajax({
+                    method: "GET",
+                    async: true,
+                    url: `${server.addr}/scouter/v1/info/server`,
+                    xhrFields: server.authentification === "cookie",
+                    timeout: 3000,
+                    beforeSend: function (xhr) {
+                        const _tokenInfo = props.user[server.addr];
+                        if (server.authentication === "bearer" && _tokenInfo) {
+                            xhr.setRequestHeader('Authorization', ['bearer ', _tokenInfo.token].join(''));
                         }
-                    });
-                }
-            );
-            Promise.all(_promise).then((_serverInfo) => {
-                let _conf = _.clone(props.config);
-                _serverInfo.forEach((_res, idx) => {
-                    _conf.servers[idx].name = `${_res.result[0].name} (${mapper[idx].addr})`;
+                    }
+                }).done((msg) => {
+                    doneCount++;
+
+                    if (msg.result && msg.result.length > 0) {
+                        serverNameMap[server.key] = { info : msg.result[0]};
+
+                    } else {
+                        serverNameMap[server.key] = {};
+                    }
+                }).fail(() => {
+                    doneCount++;
+                    serverNameMap[server.key] = {
+                        info : { name : "FAILED TO GET NAME", id : "-1"}
+                    };
+                }).always(() => {
+                    if (doneCount >= allCount) {
+                        let _conf = _.clone(props.config);
+                        _conf.servers.forEach((server, idx) => {
+                            if (serverNameMap[idx]) {
+                                server.name = `${serverNameMap[idx].info.name} (${server.name})`;
+                                server.id = serverNameMap[idx].info.id;
+                            }
+                        });
+                        props.setConfig(_conf);
+                    }
                 });
-                props.setConfig(_conf);
-            });
+
+            })
         }
     };
 
     onChangeScouterServer = (inx) => {
-        let config = JSON.parse(JSON.stringify(this.props.config));
+        const config = JSON.parse(JSON.stringify(this.props.config));
+        const currentServer = common.getServerInfo(config);
 
         for (let i = 0; i < config.servers.length; i++) {
             if (i === inx) {
@@ -206,19 +256,25 @@ class Controller extends Component {
         }
 
         this.props.setConfig(config);
+
+        const nextServer = common.getServerInfo(config);
+        if (currentServer["address"] === nextServer["address"] && currentServer["port"] === nextServer["port"]) {
+            return;
+        }
+
         this.getServers(config);
         if (localStorage) {
             localStorage.setItem("config", JSON.stringify(config));
         }
 
-        this.props.setTarget([], []);
-        this.setState({
-            servers: [],
-            objects: [],
-            activeServerId: null,
-            selectedObjects: {},
-            filter: ""
-        });
+        common.setTargetServerToUrl(this.props, config);
+        common.replaceAllLocalSettingsForServerChange(currentServer, this.props, config);
+        common.clearAllUrlParamOfPaper(this.props, config);
+        //- server가 바뀌어 쓰므로 해당 설정이 같이 삭제 되어야함
+        localStorage.removeItem("selectedObjects");
+        localStorage.removeItem("topologyOptions");
+        localStorage.removeItem("topologyPosition");
+        window.location.reload();
 
     };
 
@@ -416,7 +472,7 @@ class Controller extends Component {
             }
 
         }).fail((xhr, textStatus, errorThrown) => {
-            errorHandler(xhr, textStatus, errorThrown, that.props, "applyPreset_2", true);
+            errorHandler(xhr, textStatus, errorThrown, that.props, "applyPreset_2", false);
         });
 
 
@@ -468,7 +524,8 @@ class Controller extends Component {
                         }
                     }
 
-                    if (urlObjectHashes) {
+                    const presetName = new URLSearchParams(this.props.location.search).get('preset');
+                    if (urlObjectHashes || presetName) {
                         let selectedObjects = [];
                         let objects = [];
                         let activeServerId = null;
@@ -476,36 +533,66 @@ class Controller extends Component {
                             //일단 단일 서버로 가정하고 서버 시간과 맞춘다.
                             setServerTimeGap(Number(server.serverTime) - new Date().valueOf());
 
-                            jQuery.ajax({
-                                method: "GET",
-                                async: false,
-                                url: getHttpProtocol(this.props.config) + '/scouter/v1/object?serverId=' + server.id,
-                                xhrFields: getWithCredentials(props.config),
-                                beforeSend: function (xhr) {
-                                    setAuthHeader(xhr, props.config, getCurrentUser(props.config, props.user));
-                                }
-                            }).done(function (msg) {
-                                objects = msg.result;
-
-                                if (objects && objects.length > 0) {
-
-                                    objects.forEach((instance) => {
-                                        urlObjectHashes.forEach((objHash) => {
-                                            if (objHash === Number(instance.objHash)) {
-                                                selectedObjects.push(instance);
-                                                if (!server.selectedObjectCount) {
-                                                    server.selectedObjectCount = 0;
-                                                }
-                                                server.selectedObjectCount++;
-                                                // 마지막으로 찾은 서버 ID로 세팅
-                                                activeServerId = server.id;
+                            if (presetName) {
+                                jQuery.ajax({
+                                    method: "GET",
+                                    async: true,
+                                    url: getHttpProtocol(props.config) + "/scouter/v1/kv/__scouter_paper_preset",
+                                    xhrFields: getWithCredentials(props.config),
+                                    beforeSend: function (xhr) {
+                                        setAuthHeader(xhr, props.config, getCurrentUser(props.config, props.user));
+                                    }
+                                }).done((msg) => {
+                                    if (msg && Number(msg.status) === 200) {
+                                        if (msg.result) {
+                                            let presets = JSON.parse(msg.result);
+                                            if (presets && presets.length > 0) {
+                                                presets.forEach(serverPreset => {
+                                                    if (serverPreset.name === presetName) {
+                                                        this.props.setPresetName(presetName);
+                                                        this.applyPreset(serverPreset);
+                                                        activeServerId = server.id;
+                                                    }
+                                                });
                                             }
-                                        });
-                                    })
-                                }
-                            }).fail(function (xhr, textStatus, errorThrown) {
-                                errorHandler(xhr, textStatus, errorThrown, that.props, "setTargetFromUrl_1", true);
-                            });
+                                        }
+                                    }
+                                }).fail((xhr, textStatus, errorThrown) => {
+                                    errorHandler(xhr, textStatus, errorThrown, this.props, "loadPresets", true);
+                                });
+
+                            } else {
+                                jQuery.ajax({
+                                    method: "GET",
+                                    async: false,
+                                    url: getHttpProtocol(this.props.config) + '/scouter/v1/object?serverId=' + server.id,
+                                    xhrFields: getWithCredentials(props.config),
+                                    beforeSend: function (xhr) {
+                                        setAuthHeader(xhr, props.config, getCurrentUser(props.config, props.user));
+                                    }
+                                }).done(function (msg) {
+                                    objects = msg.result;
+
+                                    if (objects && objects.length > 0) {
+
+                                        objects.forEach((instance) => {
+                                            urlObjectHashes.forEach((objHash) => {
+                                                if (objHash === Number(instance.objHash)) {
+                                                    selectedObjects.push(instance);
+                                                    if (!server.selectedObjectCount) {
+                                                        server.selectedObjectCount = 0;
+                                                    }
+                                                    server.selectedObjectCount++;
+                                                    // 마지막으로 찾은 서버 ID로 세팅
+                                                    activeServerId = server.id;
+                                                }
+                                            });
+                                        })
+                                    }
+                                }).fail(function (xhr, textStatus, errorThrown) {
+                                    errorHandler(xhr, textStatus, errorThrown, that.props, "setTargetFromUrl_1", true);
+                                });
+                            }
                         });
 
                         if (selectedObjects.length > 0) {
@@ -540,7 +627,7 @@ class Controller extends Component {
                 }
 
             }).fail((xhr, textStatus, errorThrown) => {
-                errorHandler(xhr, textStatus, errorThrown, that.props, "setTargetFromUrl_2", true);
+                errorHandler(xhr, textStatus, errorThrown, that.props, "setTargetFromUrl_2", false);
             });
         }
     };
@@ -585,7 +672,7 @@ class Controller extends Component {
                 selectedObjects: {},
                 filter: ""
             });
-            errorHandler(xhr, textStatus, errorThrown, that.props, "getServers", true);
+            errorHandler(xhr, textStatus, errorThrown, that.props, "getServers", false);
         }).always(() => {
             this.setState({
                 loading: false
@@ -643,9 +730,12 @@ class Controller extends Component {
     quickSelectByTypeClick = (type) => {
         let filteredObjects;
         if (type === "all") {
-            filteredObjects = this.state.objects.filter((object) => {
-                return true;
-            });
+            filteredObjects = this.state.objects.filter(()=>true);
+        }
+        else if(type === "inactive"){
+            filteredObjects = this.state.objects.filter((d)=> !d.alive);
+        }else if(type === "active"){
+            filteredObjects = this.state.objects.filter((d)=> d.alive);
         } else {
             filteredObjects = this.state.objects.filter((object) => {
                 return type === this.getIconOrObjectType(object);
@@ -667,7 +757,10 @@ class Controller extends Component {
     selectAll = () => {
         let filteredObjects = this.state.objects.filter((object) => {
             if (this.state.filter && this.state.filter.length > 1) {
-                if ((object.objType && object.objType.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1) || (object.objName && object.objName.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1) || (object.address && object.address.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1)) {
+                if ((object.objType && object.objType.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1)
+                    || (object.objName && object.objName.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1)
+                    || (object.address && object.address.toLowerCase().indexOf(this.state.filter.toLowerCase()) > -1))
+                {
                     return true;
                 } else {
                     return false;
@@ -699,6 +792,7 @@ class Controller extends Component {
     };
 
     toggleFilteredObject = (objHash) => {
+
         if (this.props.filterMap[objHash]) {
             this.props.removeFilteredObject(objHash);
         } else {
@@ -719,7 +813,6 @@ class Controller extends Component {
     setOption = (key, option) => {
 
         let boxes = this.props.boxes.slice(0);
-
         boxes.forEach((box) => {
             if (box.key === key) {
 
@@ -759,6 +852,9 @@ class Controller extends Component {
                             familyName: option.familyName
                         });
                     }
+                    if(!box.advancedOption && option.advancedOption ){
+                        box.advancedOption = option.advancedOption;
+                    }
                 }
 
                 box.values = {};
@@ -792,7 +888,6 @@ class Controller extends Component {
 
     addPaperAndAddMetric = (data) => {
         let key = this.addPaper();
-
         if (data) {
             let option = JSON.parse(data);
             this.setOption(key, option);
@@ -930,7 +1025,6 @@ class Controller extends Component {
     };
 
     render() {
-
         let menu = this.props.menu.replace("/", "");
         return (
             <article className={"controller-wrapper scrollbar noselect " + this.props.control.Controller + " " + menu + "-menu"}>
@@ -1031,7 +1125,7 @@ class Controller extends Component {
                             </div>
                         </div>
                     </div>
-                    <div className="control-item paper-only" style={{zIndex: 1}}>
+                    <div className="control-item paper-only control-item-search">
                         <div className="row desc">
                             <div className="step"><span>3</span></div>
                             <div className="row-message">SEARCH</div>
@@ -1045,11 +1139,11 @@ class Controller extends Component {
                         </div>
                     </div>
 
-                    <div className="control-item paper-only">
+                    <div className="control-item paper-only control-item-calendar">
                         <div className="row desc">
                             <div className="step"><span>4</span></div>
                             <div className="row-message">CHANGE LAYOUT
-                                <div className="breakpoints" data-tip="CURRENT PAPER LAYER"><span className={"breakpoint " + (this.props.control.breakpoint === "lg" ? "selected" : "")}>Large</span><span className={"breakpoint " + (this.props.control.breakpoint === "md" ? "selected" : "")}>Small</span></div>
+                                <div className="breakpoints"><span data-tip="SMALL LAYOUT ( < 800PX)" className={"breakpoint " + (this.props.control.breakpoint === "lg" ? "selected" : "")}>L</span><span  data-tip="LARGE LAYOUT ( > 800PX)" className={"breakpoint " + (this.props.control.breakpoint === "md" ? "selected" : "")}>S</span></div>
                             </div>
                         </div>
                         <div className="row control">
@@ -1124,7 +1218,8 @@ let mapStateToProps = (state) => {
         boxes: state.paper.boxes,
         layouts: state.paper.layouts,
         layoutChangeTime: state.paper.layoutChangeTime,
-        topologyOption: state.topologyOption
+        topologyOption: state.topologyOption,
+        presetName: state.presetName
     };
 };
 
@@ -1143,7 +1238,11 @@ let mapDispatchToProps = (dispatch) => {
 
         setBoxes: (boxes) => dispatch(setBoxes(boxes)),
         setLayouts: (layouts) => dispatch(setLayouts(layouts)),
-        setBoxesLayouts: (boxes, layouts) => dispatch(setBoxesLayouts(boxes, layouts))
+        setBoxesLayouts: (boxes, layouts) => dispatch(setBoxesLayouts(boxes, layouts)),
+        setPresetName: (preset) => {
+            localStorage.setItem("preset", JSON.stringify(preset));
+            return dispatch(setPresetName(preset));
+        }
     };
 };
 

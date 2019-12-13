@@ -1,6 +1,6 @@
 import React, {Component} from 'react';
 import './LayoutManager.css';
-import {setTemplate, setControlVisibility, pushMessage} from '../../../actions';
+import {setTemplate, setControlVisibility, pushMessage, setLayoutName} from '../../../actions';
 import {connect} from 'react-redux';
 import {withRouter} from 'react-router-dom';
 import {getData, setData} from '../../../common/common';
@@ -219,15 +219,14 @@ class LayoutManager extends Component {
             let template = this.state.templates[i];
 
             if (template.no === no) {
+                this.props.setLayoutName(template.name);
+                setData("templateName", Object.assign({}, getData("templateName"), {layout: template.name}));
                 setData("boxes", template.boxes);
                 setData("layouts", template.layouts);
 
                 this.props.setTemplate(template.boxes, template.layouts);
 
-                let search = new URLSearchParams();
-                search.set('objects', this.props.objects.map((d) => {
-                    return d.objHash
-                }));
+                let search = new URLSearchParams(this.props.location.search);
                 search.set('layout', template.name);
 
                 if (!(this.props.history.location.pathname === "/paper" && this.props.history.location.search === search)) {
@@ -364,7 +363,8 @@ let mapDispatchToProps = (dispatch) => {
     return {
         setTemplate: (boxes, layouts) => dispatch(setTemplate(boxes, layouts)),
         setControlVisibility: (name, value) => dispatch(setControlVisibility(name, value)),
-        pushMessage: (category, title, content) => dispatch(pushMessage(category, title, content))
+        pushMessage: (category, title, content) => dispatch(pushMessage(category, title, content)),
+        setLayoutName: (layout) => dispatch(setLayoutName(layout))
     };
 };
 

@@ -82,6 +82,12 @@ class TopologyMinControl extends Component {
                         <div className="text"><span>G</span></div>
                     </div>
                 </div>
+                <div className="row" data-tip="Arc Line">
+                    <div onClick={()=>this.checkBtnClick("arcLine")} className={"control-btn check-btn " + (this.props.topologyOption.arcLine ? "selected" : "")}>
+                        <div className="text"><span>A</span></div>
+                    </div>
+                </div>
+
                 <div className="row">
                     <div data-tip="TPS TO LINE SPEED" onClick={this.checkBtnClick.bind(this, "tpsToLineSpeed")} className={"control-btn radio-btn first " + (this.props.topologyOption.tpsToLineSpeed ? "selected" : "")}>
                         <div className="text"><span>T</span></div>
@@ -117,12 +123,12 @@ class TopologyMinControl extends Component {
                     </div>
                 </div>
                 <div className="row" data-tip="DISTANCE +">
-                    <div onClick={this.changeDistance.bind(this, "plus")} className="control-btn action-btn">
+                    <div onClick={this.changeDistance.bind(this, "plus")} className={"control-btn action-btn " + (this.props.topologyOption.pin ? "disabled" : "")}>
                         <div className="text"><span>+</span></div>
                     </div>
                 </div>
                 <div className="row" data-tip="DISTANCE -">
-                    <div onClick={this.changeDistance.bind(this, "minus")} className="control-btn action-btn">
+                    <div onClick={this.changeDistance.bind(this, "minus")} className={"control-btn action-btn " + (this.props.topologyOption.pin ? "disabled" : "")}>
                         <div className="text"><span>-</span></div>
                     </div>
                 </div>
